@@ -7,21 +7,76 @@ DSH Host plugin：把 Discord 接上**安裝它的那台 DSH** 的 local chat se
 - 內含 `discord-whale` 受限 preset（persona + compaction，沒有 shell／檔案工具）。
 - 遠端 DSH 連線是另一個獨立 plugin `dsh-remote`，不是這個 plugin 的依賴。
 
-## 目前狀態
+## 安裝
 
-重構中：先把與 DSH 無關的純模組搬進來並保留測試。
+```bash
+# 在 repo 根目錄先建置
+npm run build --workspace @local/dsh-discord-bot
+npm run build:preset --workspace @local/dsh-discord-bot
 
-已完成：
+# 安裝到 DSH web profile（開發時用 link: 可直接反映原始碼變更）
+dsh plugin --profile web add /absolute/path/to/plugins/discord-bot
+# 或
+dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
+```
 
-- `src/normalize.ts`：Discord 訊息正規化
-- `src/policy.ts`：白名單與觸發判斷
-- `src/split.ts`：2000 字拆分
-- `src/sender.ts`：typing、allowedMentions、429 重試
-- 對應單元測試
+安裝後 DSH profile 會多出：
 
-待完成：
+- host row `discord-bot`
+- `discord-whale` agent preset
+- `@local/dsh-discord-bot` dependency
 
-- DSH Host plugin 入口與 `cordis.patch.yml`
-- local session backend（`ctx.sessionController` / `ctx.on('session/event')`）
-- `discord-whale` preset bundle
-- Discord token／白名單的 DSH settings 或 credentials 介面
+> 如果之前裝過舊的外部 bridge preset bundle（`discord-bot-on-dsh-preset`），先把它從 profile 的 `dsh.profile.bundles` 移除，避免兩個 bundle 同時宣告 `discord-whale`。
+
+## 設定
+
+非秘密設定在 plugin row 的 `config`。安裝後可在
+`~/.dsh/profiles/web/cordis.patch.yml` 覆寫：
+
+```yaml
+- id: discord-bot
+  config:
+    guildIds: ['111111111111111111']
+    channelIds: ['222222222222222222']
+    ownerUserId: '333333333333333333'
+    preset: discord-whale
+    replyTimeoutMs: 120000
+    logLevel: info
+```
+
+- `guildIds`／`channelIds` 空值會 **fail closed**，plugin 不會連 Discord。
+- `preset` 預設 `discord-whale`；建立 session 前會用 `ctx.agentPresets.resolve` 確認，找不到就拒絕建立。
+- `DISCORD_TOKEN` 優先用 DSH credentials；沒有時 fallback 到 DSH process 的 `DISCORD_TOKEN` 環境變數。
+- 不要把 Discord token 放進 `cordis.patch.yml` 或版本庫。
+
+## 運作方式
+
+```text
+Discord Gateway
+   → 白名單／@ 或回覆判斷
+   → 每頻道一個 local DSH session（discord-whale）
+   → sessionController.prompt()
+   → ctx.on('session/event') 收集 assistant/message、turn/end
+   → 回覆發回 Discord
+```
+
+- session mapping：`~/.dsh/discord-bot/sessions.json`
+- session cwd：`~/.dsh/discord-bot/agents`
+- 非 tag 訊息仍送進 DSH（`[僅記錄]`），但回覆在階段一丟棄。
+- `DSH session not-found` 會重建一次；逾時會 `sessionController.cancel`。
+
+## 測試
+
+```bash
+npm run typecheck --workspace @local/dsh-discord-bot
+npm test --workspace @local/dsh-discord-bot
+```
+
+涵蓋：訊息正規化、白名單／觸發、2000 字拆分、allowedMentions、local session backend（建立、佇列、timeout、not-found 重建）。
+
+## 尚未 live 驗證
+
+- `ctx.sessionController` 從 Host plugin row 直接建立 preset session
+- `ctx.on('session/event')` 的 turn 配對
+- DSH credentials 的 `DISCORD_TOKEN`
+- `dsh plugin add` 後的 profile 載入與重啟

@@ -1,0 +1,12 @@
+# Defaults are intentionally empty: the plugin refuses to connect Discord
+# until guildIds and channelIds are filled in the profile patch.
+- insert:
+    - id: discord-bot
+      name: '@local/dsh-discord-bot'
+      config:
+        guildIds: []
+        channelIds: []
+        ownerUserId: ''
+        preset: discord-whale
+        replyTimeoutMs: 120000
+        logLevel: info

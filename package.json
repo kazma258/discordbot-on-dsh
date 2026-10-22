@@ -4,16 +4,55 @@
   "private": true,
   "type": "module",
   "description": "DSH Host plugin: connect Discord to the local DSH chat session",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "presets",
+    "README.md"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./presets/discord-whale.patch.yml",
+        "./cordis.patch.yml"
+      ]
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:preset": "tsx scripts/build-preset.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-credentials": "^0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.5",
     "discord.js": "^14.27.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.5"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "js-yaml": "^5.5.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }

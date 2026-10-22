@@ -1,0 +1,56 @@
+export interface IncomingDiscordMessage {
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly authorId: string;
+  readonly authorName: string;
+  readonly createdAt: Date;
+  readonly text: string;
+  readonly replyRequired: boolean;
+}
+
+export interface MessageHandler {
+  /** Returns the final reply text, or null/empty when no reply should be sent. */
+  onMessage(message: IncomingDiscordMessage): Promise<string | null>;
+}
+
+/** The subset of DSH's sessionController service the Discord plugin needs. */
+export interface SessionControllerLike {
+  create(request: { cwd: string; agentPreset: string }): Promise<{
+    sessionId: string;
+    agentPreset?: string;
+  }>;
+
+  prompt(
+    request: {
+      requestId: string;
+      sessionId: string;
+      mode: 'queue';
+      content: readonly { type: 'text'; text: string }[];
+    },
+    signal?: AbortSignal
+  ): Promise<unknown>;
+
+  cancel?(request: { sessionId: string }): Promise<unknown>;
+}
+
+export interface SessionEventLike {
+  readonly type: string;
+  readonly data?: {
+    readonly turn?: number;
+    readonly reason?: string;
+    readonly message?: {
+      readonly content?: readonly { readonly type?: string; readonly text?: string }[];
+    };
+    readonly [key: string]: unknown;
+  };
+  readonly [key: string]: unknown;
+}
+
+export type SessionEventHandler = (event: SessionEventLike) => void;
+
+/** Subscribe to live session/event traffic for one session; returns an unsubscribe. */
+export type SessionEventSubscriber = (
+  sessionId: string,
+  handler: SessionEventHandler
+) => () => void;
