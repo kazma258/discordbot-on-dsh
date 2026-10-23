@@ -241,6 +241,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
         modelSelection,
+        diagnosticPath: join(baseDir, 'last-message.json'),
         ensurePreset: async () => {
           const resolved = await ctx.agentPresets.resolve(settings.preset);
           if (!resolved) {

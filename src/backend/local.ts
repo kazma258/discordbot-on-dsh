@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import type { Logger } from '../logger.js';
 import { cleanDshReply, formatDshPrompt } from '../prompt.js';
@@ -23,6 +24,8 @@ export interface LocalBackendOptions {
   readonly presetId?: string;
   readonly replyTimeoutMs?: number;
   readonly modelSelection?: ModelSelection;
+  /** Last-message diagnostic file; never contains the prompt text or token. */
+  readonly diagnosticPath?: string;
   /** Fail-closed check performed before the first session is created. */
   readonly ensurePreset?: () => Promise<void>;
 }
@@ -50,6 +53,10 @@ function textFromContent(
     .join('');
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isSessionNotFound(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -72,6 +79,7 @@ export class LocalSessionBackend implements MessageHandler {
   private readonly presetId: string;
   private readonly replyTimeoutMs: number;
   private readonly modelSelection?: ModelSelection;
+  private readonly diagnosticPath?: string;
   private readonly ensurePreset?: () => Promise<void>;
   private readonly queue = new KeyedQueue();
   private readonly connections = new Map<string, Connection>();
@@ -87,6 +95,7 @@ export class LocalSessionBackend implements MessageHandler {
     this.presetId = options.presetId ?? 'discord-whale';
     this.replyTimeoutMs = options.replyTimeoutMs ?? 120_000;
     this.modelSelection = options.modelSelection;
+    this.diagnosticPath = options.diagnosticPath;
     this.ensurePreset = options.ensurePreset;
   }
 
@@ -100,7 +109,27 @@ export class LocalSessionBackend implements MessageHandler {
   }
 
   async onMessage(message: IncomingDiscordMessage): Promise<string | null> {
+    this.writeDiagnostic('message', {
+      channelId: message.channelId,
+      messageId: message.messageId,
+      replyRequired: message.replyRequired,
+      textChars: message.text.length
+    });
     return this.queue.enqueue(message.channelId, () => this.processMessage(message));
+  }
+
+  private writeDiagnostic(phase: string, extra: Record<string, unknown> = {}): void {
+    if (!this.diagnosticPath) return;
+    try {
+      mkdirSync(dirname(this.diagnosticPath), { recursive: true });
+      writeFileSync(
+        this.diagnosticPath,
+        JSON.stringify({ at: new Date().toISOString(), phase, ...extra }, null, 2) + '\n',
+        'utf8'
+      );
+    } catch {
+      // Diagnostics must never affect message handling.
+    }
   }
 
   async stop(): Promise<void> {
@@ -116,6 +145,11 @@ export class LocalSessionBackend implements MessageHandler {
 
   private async processMessage(message: IncomingDiscordMessage): Promise<string | null> {
     const startedAt = Date.now();
+    this.writeDiagnostic('processing', {
+      channelId: message.channelId,
+      messageId: message.messageId,
+      replyRequired: message.replyRequired
+    });
     try {
       const replyText = await this.runPrompt(message);
       const reply = cleanDshReply(replyText);
@@ -144,6 +178,11 @@ export class LocalSessionBackend implements MessageHandler {
           });
           return reply;
         } catch (retryError) {
+          this.writeDiagnostic('process-error', {
+            channelId: message.channelId,
+            messageId: message.messageId,
+            error: errorText(retryError)
+          });
           this.logger.error('DSH turn failed after session recreation', {
             channelId: message.channelId,
             messageId: message.messageId,
@@ -153,6 +192,11 @@ export class LocalSessionBackend implements MessageHandler {
         }
       }
 
+      this.writeDiagnostic('process-error', {
+        channelId: message.channelId,
+        messageId: message.messageId,
+        error: errorText(error)
+      });
       this.logger.error('DSH turn failed', {
         channelId: message.channelId,
         messageId: message.messageId,
@@ -165,6 +209,11 @@ export class LocalSessionBackend implements MessageHandler {
   private async runPrompt(message: IncomingDiscordMessage): Promise<string> {
     const connection = await this.ensureConnection(message.channelId);
     await this.applyModelSelection(connection.sessionId);
+    this.writeDiagnostic('prompting', {
+      channelId: message.channelId,
+      messageId: message.messageId,
+      sessionId: connection.sessionId
+    });
     const reply = this.waitForTurn(message.channelId, connection.sessionId, this.replyTimeoutMs);
     try {
       await this.controller.prompt(
@@ -176,7 +225,17 @@ export class LocalSessionBackend implements MessageHandler {
         },
         new AbortController().signal
       );
+      this.writeDiagnostic('prompt-accepted', {
+        channelId: message.channelId,
+        messageId: message.messageId,
+        sessionId: connection.sessionId
+      });
     } catch (error) {
+      this.writeDiagnostic('prompt-error', {
+        channelId: message.channelId,
+        messageId: message.messageId,
+        error: errorText(error)
+      });
       this.failPending(message.channelId, error);
     }
     return reply;
@@ -245,6 +304,12 @@ export class LocalSessionBackend implements MessageHandler {
 
       this.pending.delete(channelId);
       clearTimeout(pending.timer);
+      this.writeDiagnostic('turn-end', {
+        channelId,
+        turn,
+        replyChars: pending.text.length,
+        reason: event.data?.reason
+      });
       this.logger.debug('DSH turn ended', {
         channelId,
         turn,
