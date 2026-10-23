@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -130,6 +131,34 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   const settings = normalizeSettings(rawConfig);
   const logger = createPluginLogger(ctx, settings.logLevel);
   const bus = new SessionEventBus();
+  const baseDir = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'discord-bot');
+
+  const writeStatus = (phase: string, extra: Record<string, unknown> = {}): void => {
+    try {
+      mkdirSync(baseDir, { recursive: true });
+      writeFileSync(
+        join(baseDir, 'status.json'),
+        JSON.stringify(
+          {
+            at: new Date().toISOString(),
+            pid: process.pid,
+            phase,
+            preset: settings.preset,
+            guilds: settings.guildIds.length,
+            channels: settings.channelIds.length,
+            ...extra
+          },
+          null,
+          2
+        ) + '\n',
+        'utf8'
+      );
+    } catch {
+      // Diagnostics must never block plugin startup.
+    }
+  };
+
+  writeStatus('apply', { tokenConfigured: null });
 
   // We ship a custom Settings -> Discord Bot page; suppress the generic form.
   if (ctx.inject) {
@@ -153,12 +182,15 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   ctx.effect(() => {
     void (async () => {
       const token = await resolveDiscordToken(ctx, logger);
+      writeStatus('token-resolved', { tokenConfigured: token !== '' });
       if (disposed) return;
       if (token === '') {
+        writeStatus('no-token', { tokenConfigured: false });
         logger.error('Discord plugin not started: DISCORD_TOKEN is not configured');
         return;
       }
       if (settings.guildIds.length === 0 || settings.channelIds.length === 0) {
+        writeStatus('no-allowlist', { tokenConfigured: true });
         logger.error('Discord plugin not started: guildIds and channelIds must not be empty');
         return;
       }
@@ -174,7 +206,6 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
             }
           : undefined;
 
-      const baseDir = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'discord-bot');
       backend = new LocalSessionBackend({
         controller: ctx.sessionController,
         subscribeSessionEvents: bus.subscribe,
@@ -192,6 +223,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         }
       });
       await backend.start();
+      writeStatus('backend-started', { tokenConfigured: true });
       if (disposed) {
         await backend.stop();
         backend = undefined;
@@ -209,12 +241,17 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
       };
       bridge = new DiscordBridge(config, backend, logger);
       await bridge.start();
+      writeStatus('started', { tokenConfigured: true });
       logger.info('Discord plugin started', {
         guilds: settings.guildIds.length,
         channels: settings.channelIds.length,
         preset: settings.preset
       });
     })().catch((error: unknown) => {
+      writeStatus('error', {
+        tokenConfigured: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
       logger.error('Discord plugin failed to start', { error });
     });
 
