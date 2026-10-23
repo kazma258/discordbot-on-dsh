@@ -24,10 +24,10 @@ tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以�
 ```bash
 # 在 repo 根目錄
 npm run pack:discord-bot
-# 產物：packs/local-dsh-discord-bot-0.2.5.tgz
+# 產物：packs/local-dsh-discord-bot-0.2.6.tgz
 
 # 複製 tarball 到目標 DSH 後：
-dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.2.5.tgz
+dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.2.6.tgz
 ```
 
 安裝後 DSH profile 會多出：

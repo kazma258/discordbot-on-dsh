@@ -47,6 +47,24 @@ export interface SessionControllerLike {
   cancel?(request: { sessionId: string }): Promise<unknown>;
 }
 
+export interface AgentLike {
+  followup(input: {
+    content: readonly { type: 'text'; text: string }[];
+    source: { kind: 'user' };
+  }): void;
+}
+
+export interface AgentHandleLike {
+  readonly agent: AgentLike;
+  dispose(): Promise<void>;
+}
+
+/** Host agent registry used instead of the Remote-only session prompt facade. */
+export interface AgentServiceLike {
+  get(sessionId: string): AgentHandleLike | undefined;
+  resume(options: { resumeSessionId: string }): Promise<AgentHandleLike>;
+}
+
 export interface SessionEventLike {
   readonly type: string;
   readonly data?: {
