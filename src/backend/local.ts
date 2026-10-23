@@ -8,6 +8,7 @@ import { loadSessionState, saveSessionState, type SessionRecord } from '../state
 import type {
   IncomingDiscordMessage,
   MessageHandler,
+  ModelSelection,
   SessionControllerLike,
   SessionEventLike,
   SessionEventSubscriber
@@ -21,6 +22,7 @@ export interface LocalBackendOptions {
   readonly agentsDir: string;
   readonly presetId?: string;
   readonly replyTimeoutMs?: number;
+  readonly modelSelection?: ModelSelection;
   /** Fail-closed check performed before the first session is created. */
   readonly ensurePreset?: () => Promise<void>;
 }
@@ -69,6 +71,7 @@ export class LocalSessionBackend implements MessageHandler {
   private readonly agentsDir: string;
   private readonly presetId: string;
   private readonly replyTimeoutMs: number;
+  private readonly modelSelection?: ModelSelection;
   private readonly ensurePreset?: () => Promise<void>;
   private readonly queue = new KeyedQueue();
   private readonly connections = new Map<string, Connection>();
@@ -83,6 +86,7 @@ export class LocalSessionBackend implements MessageHandler {
     this.agentsDir = options.agentsDir;
     this.presetId = options.presetId ?? 'discord-whale';
     this.replyTimeoutMs = options.replyTimeoutMs ?? 120_000;
+    this.modelSelection = options.modelSelection;
     this.ensurePreset = options.ensurePreset;
   }
 
@@ -160,6 +164,7 @@ export class LocalSessionBackend implements MessageHandler {
 
   private async runPrompt(message: IncomingDiscordMessage): Promise<string> {
     const connection = await this.ensureConnection(message.channelId);
+    await this.applyModelSelection(connection.sessionId);
     const reply = this.waitForTurn(message.channelId, connection.sessionId, this.replyTimeoutMs);
     try {
       await this.controller.prompt(
@@ -175,6 +180,26 @@ export class LocalSessionBackend implements MessageHandler {
       this.failPending(message.channelId, error);
     }
     return reply;
+  }
+
+  private async applyModelSelection(sessionId: string): Promise<void> {
+    const selection = this.modelSelection;
+    if (!selection) return;
+    if (!this.controller.selectModel) {
+      throw new Error('sessionController.selectModel is unavailable; cannot apply the configured model');
+    }
+    await this.controller.selectModel({
+      sessionId,
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {})
+    });
+    this.logger.debug('applied DSH model selection', {
+      sessionId,
+      provider: selection.provider,
+      model: selection.model,
+      reasoningEffort: selection.reasoningEffort ?? null
+    });
   }
 
   private waitForTurn(channelId: string, sessionId: string, timeoutMs: number): Promise<string> {

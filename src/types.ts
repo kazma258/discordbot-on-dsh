@@ -14,6 +14,12 @@ export interface MessageHandler {
   onMessage(message: IncomingDiscordMessage): Promise<string | null>;
 }
 
+export interface ModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoningEffort?: string;
+}
+
 /** The subset of DSH's sessionController service the Discord plugin needs. */
 export interface SessionControllerLike {
   create(request: { cwd: string; agentPreset: string }): Promise<{
@@ -30,6 +36,13 @@ export interface SessionControllerLike {
     },
     signal?: AbortSignal
   ): Promise<unknown>;
+
+  selectModel?(request: {
+    sessionId: string;
+    provider: string;
+    model: string;
+    reasoningEffort?: string;
+  }): Promise<unknown>;
 
   cancel?(request: { sessionId: string }): Promise<unknown>;
 }

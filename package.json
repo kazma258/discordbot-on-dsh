@@ -9,10 +9,14 @@
     ".": {
       "default": "./lib/index.js"
     },
+    "./client": {
+      "default": "./client/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "client",
     "cordis.patch.yml",
     "presets",
     "README.md"
@@ -27,6 +31,13 @@
         "./presets/discord-whale.patch.yml",
         "./cordis.patch.yml"
       ]
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web"
     }
   },
   "scripts": {

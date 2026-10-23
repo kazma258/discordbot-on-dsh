@@ -17,6 +17,13 @@ interface PluginLogger {
   error(message: string): void;
 }
 
+interface SettingsContext {
+  readonly settings?: {
+    configure(policy: { auto: boolean }, fiber: unknown): void;
+  };
+  readonly fiber?: unknown;
+}
+
 interface PluginContext {
   readonly sessionController: SessionControllerLike;
   readonly agentPresets: {
@@ -26,6 +33,10 @@ interface PluginContext {
     resolve(ref: unknown): Promise<{ value?: string } | undefined>;
   };
   readonly logger: PluginLogger;
+  inject?(
+    names: readonly string[],
+    callback: (child: SettingsContext) => void
+  ): unknown;
   on(
     event: 'session/event',
     handler: (session: { id: string }, event: SessionEventLike) => void
@@ -37,12 +48,15 @@ export const name = 'discord-bot';
 export const inject = ['sessionController', 'agentPresets', 'credentials'] as const;
 
 export const Config = z.object({
-  guildIds: z.array(z.string()).default([]),
-  channelIds: z.array(z.string()).default([]),
-  ownerUserId: z.string().default(''),
-  preset: z.string().default('discord-whale'),
-  replyTimeoutMs: z.number().default(120_000),
-  logLevel: z.string().default('info')
+  guildIds: z.array(z.string()).default([]).volatile(),
+  channelIds: z.array(z.string()).default([]).volatile(),
+  ownerUserId: z.string().default('').volatile(),
+  preset: z.string().default('discord-whale').volatile(),
+  provider: z.string().default('').volatile(),
+  model: z.string().default('').volatile(),
+  reasoningEffort: z.string().default('').volatile(),
+  replyTimeoutMs: z.number().default(120_000).volatile(),
+  logLevel: z.string().default('info').volatile()
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,6 +93,10 @@ function normalizeSettings(input: unknown): DiscordPluginSettings {
     channelIds: stringArray(raw.channelIds),
     ownerUserId: typeof raw.ownerUserId === 'string' ? raw.ownerUserId.trim() : '',
     preset,
+    provider: typeof raw.provider === 'string' ? raw.provider.trim() : '',
+    model: typeof raw.model === 'string' ? raw.model.trim() : '',
+    reasoningEffort:
+      typeof raw.reasoningEffort === 'string' ? raw.reasoningEffort.trim() : '',
     replyTimeoutMs,
     logLevel
   };
@@ -113,6 +131,17 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   const logger = createPluginLogger(ctx, settings.logLevel);
   const bus = new SessionEventBus();
 
+  // We ship a custom Settings -> Discord Bot page; suppress the generic form.
+  if (ctx.inject) {
+    ctx.inject(['settings'], (settingsCtx) => {
+      try {
+        settingsCtx.settings?.configure({ auto: false }, settingsCtx.fiber);
+      } catch (error) {
+        logger.warn('failed to disable the generated settings form', { error });
+      }
+    });
+  }
+
   ctx.on('session/event', (session, event) => {
     bus.dispatch(session.id, event);
   });
@@ -134,6 +163,17 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         return;
       }
 
+      const modelSelection =
+        settings.provider !== '' && settings.model !== ''
+          ? {
+              provider: settings.provider,
+              model: settings.model,
+              ...(settings.reasoningEffort !== ''
+                ? { reasoningEffort: settings.reasoningEffort }
+                : {})
+            }
+          : undefined;
+
       const baseDir = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'discord-bot');
       backend = new LocalSessionBackend({
         controller: ctx.sessionController,
@@ -143,6 +183,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         agentsDir: join(baseDir, 'agents'),
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
+        modelSelection,
         ensurePreset: async () => {
           const resolved = await ctx.agentPresets.resolve(settings.preset);
           if (!resolved) {
@@ -163,7 +204,8 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         allowedChannelIds: new Set(settings.channelIds),
         ownerUserId: settings.ownerUserId,
         presetId: settings.preset,
-        replyTimeoutMs: settings.replyTimeoutMs
+        replyTimeoutMs: settings.replyTimeoutMs,
+        modelSelection
       };
       bridge = new DiscordBridge(config, backend, logger);
       await bridge.start();

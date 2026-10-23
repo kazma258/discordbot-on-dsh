@@ -8,6 +8,7 @@ import { LocalSessionBackend } from '../src/backend/local.js';
 import { createLogger } from '../src/logger.js';
 import type {
   IncomingDiscordMessage,
+  ModelSelection,
   SessionControllerLike,
   SessionEventLike,
   SessionEventHandler
@@ -53,6 +54,12 @@ class FakeController implements SessionControllerLike {
   turn = 0;
   readonly prompts: string[] = [];
   readonly cancels: string[] = [];
+  readonly modelSelections: Array<{
+    sessionId: string;
+    provider: string;
+    model: string;
+    reasoningEffort?: string;
+  }> = [];
   failNextPrompt = false;
   emitReply = true;
 
@@ -91,6 +98,16 @@ class FakeController implements SessionControllerLike {
     return {};
   }
 
+  async selectModel(request: {
+    sessionId: string;
+    provider: string;
+    model: string;
+    reasoningEffort?: string;
+  }): Promise<unknown> {
+    this.modelSelections.push(request);
+    return {};
+  }
+
   async cancel(request: { sessionId: string }): Promise<unknown> {
     this.cancels.push(request.sessionId);
     return {};
@@ -112,7 +129,8 @@ function makeBackend(
   directory: string,
   controller: FakeController,
   bus: EventBus,
-  replyTimeoutMs = 5_000
+  replyTimeoutMs = 5_000,
+  modelSelection?: ModelSelection
 ): LocalSessionBackend {
   return new LocalSessionBackend({
     controller,
@@ -120,7 +138,8 @@ function makeBackend(
     logger,
     statePath: join(directory, 'sessions.json'),
     agentsDir: join(directory, 'agents'),
-    replyTimeoutMs
+    replyTimeoutMs,
+    modelSelection
   });
 }
 
@@ -196,6 +215,32 @@ describe('LocalSessionBackend', () => {
 
       expect(reply).toBe('reply');
       expect(controller.creates).toBe(2);
+      await backend.stop();
+    });
+  });
+
+  it('applies the configured model selection before prompting', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      const backend = makeBackend(directory, controller, bus, 5_000, {
+        provider: 'dsh-opencode-go',
+        model: 'deepseek-v4.1-flash',
+        reasoningEffort: 'low'
+      });
+      await backend.start();
+
+      const reply = await backend.onMessage(MESSAGE);
+
+      expect(reply).toBe('reply');
+      expect(controller.modelSelections).toEqual([
+        {
+          sessionId: 'session-1',
+          provider: 'dsh-opencode-go',
+          model: 'deepseek-v4.1-flash',
+          reasoningEffort: 'low'
+        }
+      ]);
       await backend.stop();
     });
   });

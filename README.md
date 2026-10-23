@@ -1,6 +1,6 @@
 # dsh-discord-bot
 
-DSH Host plugin：把 Discord 接上**安裝它的那台 DSH** 的 local chat session。
+DSH Host plugin + Web client Settings 卡片：把 Discord 接上**安裝它的那台 DSH** 的 local chat session。
 
 - 不使用遠端 DSH、不需要 `DSH_COOKIE`。
 - 要讓 bot 跑在遠端 DSH，就把這個 plugin 裝在那台遠端 DSH。
@@ -17,7 +17,7 @@ DSH 載入的是 package 的 `main`（`./lib/index.js`）與 `dsh.bundle.patch` 
 - `tsc` → `lib/`
 - 從 `persona/character.md` 重新產生 `presets/discord-whale.patch.yml`
 
-tarball 內已含 `lib/`、`cordis.patch.yml`、`presets/`，所以目標 DSH 不需要 Node build。
+tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以目標 DSH 不需要 Node build。
 
 ## 安裝（建議：打包後安裝）
 
@@ -52,24 +52,40 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 
 ## 設定
 
-非秘密設定在 plugin row 的 `config`。安裝後可在
-`~/.dsh/profiles/web/cordis.patch.yml` 覆寫：
+安裝並重啟 DSH 後，Settings 會多一個 **Discord Bot** section，不需要手改 profile YAML。
+
+卡片欄位：
+
+| 欄位 | 說明 |
+|---|---|
+| Bot Token | 存進 DSH credentials 的 `DISCORD_TOKEN`，不會寫入 profile |
+| Guild IDs | 每行一個或逗號分隔；空值 fail closed |
+| Channel IDs | 允許回覆的頻道 |
+| Owner User ID | 保留給 owner-only 功能，可留空 |
+| Provider | 例如 `dsh-opencode-go`、`deepseek-official` |
+| Model | 例如 `deepseek-v4.1-flash` |
+| Reasoning Effort | 預設／off／low／high／max |
+| Agent Preset | 預設 `discord-whale` |
+| Reply Timeout | 5000–600000 ms |
+| Log Level | debug／info／warn／error |
+
+- 非秘密設定透過 DSH settings 寫回 profile patch；卡片是主要設定方式。
+- `DISCORD_TOKEN` 只存 credentials；若 credentials 沒有值，host 仍會 fallback 到 process env。
+- 模型欄位留空 = 使用 DSH 預設模型；有填 provider + model 時，backend 會在每次 prompt 前呼叫 `sessionController.selectModel`。
+- Token 或設定變更後若 DSH 沒有自動 reload plugin，重啟 DSH 讓 Discord 重新連線。
+- 不要把 token 放進 `cordis.patch.yml` 或版本庫。
+
+進階／fallback 才需要手動覆寫：
 
 ```yaml
 - id: discord-bot
   config:
     guildIds: ['111111111111111111']
     channelIds: ['222222222222222222']
-    ownerUserId: '333333333333333333'
-    preset: discord-whale
-    replyTimeoutMs: 120000
-    logLevel: info
+    provider: dsh-opencode-go
+    model: deepseek-v4.1-flash
+    reasoningEffort: low
 ```
-
-- `guildIds`／`channelIds` 空值會 **fail closed**，plugin 不會連 Discord。
-- `preset` 預設 `discord-whale`；建立 session 前會用 `ctx.agentPresets.resolve` 確認，找不到就拒絕建立。
-- `DISCORD_TOKEN` 優先用 DSH credentials；沒有時 fallback 到 DSH process 的 `DISCORD_TOKEN` 環境變數。
-- 不要把 Discord token 放進 `cordis.patch.yml` 或版本庫。
 
 ## 運作方式
 
@@ -94,11 +110,12 @@ npm run typecheck --workspace @local/dsh-discord-bot
 npm test --workspace @local/dsh-discord-bot
 ```
 
-涵蓋：訊息正規化、白名單／觸發、2000 字拆分、allowedMentions、local session backend（建立、佇列、timeout、not-found 重建）。
+涵蓋：訊息正規化、白名單／觸發、2000 字拆分、allowedMentions、local session backend（建立、佇列、timeout、not-found 重建、model selection）。
 
 ## 尚未 live 驗證
 
 - `ctx.sessionController` 從 Host plugin row 直接建立 preset session
 - `ctx.on('session/event')` 的 turn 配對
+- `ctx.configForms` 卡片與 volatile Config 的即時寫入
 - DSH credentials 的 `DISCORD_TOKEN`
 - `dsh plugin add` 後的 profile 載入與重啟
