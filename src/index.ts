@@ -72,32 +72,58 @@ function stringArray(value: unknown): string[] {
     .filter((item) => item !== '');
 }
 
-function normalizeSettings(input: unknown): DiscordPluginSettings {
+/**
+ * `.volatile()` fields are stable references, not plain values. DSH passes
+ * those references to `apply`; read them with `.get()` before normalizing.
+ */
+function readVolatile<T>(value: unknown, fallback: T): T {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { get?: unknown }).get === 'function'
+  ) {
+    try {
+      const resolved = (value as { get: () => T | undefined }).get();
+      return resolved === undefined ? fallback : resolved;
+    } catch {
+      return fallback;
+    }
+  }
+  return (value as T | undefined) === undefined ? fallback : (value as T);
+}
+
+export function normalizeSettings(input: unknown): DiscordPluginSettings {
   const raw = isRecord(input) ? input : {};
-  const preset = typeof raw.preset === 'string' && raw.preset.trim() !== ''
-    ? raw.preset.trim()
+  const rawPreset = readVolatile<unknown>(raw.preset, '');
+  const preset = typeof rawPreset === 'string' && rawPreset.trim() !== ''
+    ? rawPreset.trim()
     : 'discord-whale';
+  const rawLogLevel = readVolatile<unknown>(raw.logLevel, 'info');
   const logLevel: DiscordPluginSettings['logLevel'] =
-    typeof raw.logLevel === 'string' && isLogLevel(raw.logLevel)
-      ? raw.logLevel
+    typeof rawLogLevel === 'string' && isLogLevel(rawLogLevel)
+      ? rawLogLevel
       : 'info';
+  const rawReplyTimeoutMs = readVolatile<unknown>(raw.replyTimeoutMs, 120_000);
   const replyTimeoutMs =
-    typeof raw.replyTimeoutMs === 'number' &&
-    Number.isSafeInteger(raw.replyTimeoutMs) &&
-    raw.replyTimeoutMs >= 5_000 &&
-    raw.replyTimeoutMs <= 600_000
-      ? raw.replyTimeoutMs
+    typeof rawReplyTimeoutMs === 'number' &&
+    Number.isSafeInteger(rawReplyTimeoutMs) &&
+    rawReplyTimeoutMs >= 5_000 &&
+    rawReplyTimeoutMs <= 600_000
+      ? rawReplyTimeoutMs
       : 120_000;
+  const rawOwner = readVolatile<unknown>(raw.ownerUserId, '');
+  const rawProvider = readVolatile<unknown>(raw.provider, '');
+  const rawModel = readVolatile<unknown>(raw.model, '');
+  const rawEffort = readVolatile<unknown>(raw.reasoningEffort, '');
 
   return {
-    guildIds: stringArray(raw.guildIds),
-    channelIds: stringArray(raw.channelIds),
-    ownerUserId: typeof raw.ownerUserId === 'string' ? raw.ownerUserId.trim() : '',
+    guildIds: stringArray(readVolatile<unknown>(raw.guildIds, [])),
+    channelIds: stringArray(readVolatile<unknown>(raw.channelIds, [])),
+    ownerUserId: typeof rawOwner === 'string' ? rawOwner.trim() : '',
     preset,
-    provider: typeof raw.provider === 'string' ? raw.provider.trim() : '',
-    model: typeof raw.model === 'string' ? raw.model.trim() : '',
-    reasoningEffort:
-      typeof raw.reasoningEffort === 'string' ? raw.reasoningEffort.trim() : '',
+    provider: typeof rawProvider === 'string' ? rawProvider.trim() : '',
+    model: typeof rawModel === 'string' ? rawModel.trim() : '',
+    reasoningEffort: typeof rawEffort === 'string' ? rawEffort.trim() : '',
     replyTimeoutMs,
     logLevel
   };
