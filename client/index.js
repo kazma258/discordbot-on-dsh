@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: 'dsh-discord-bot',
+  id: '@local/dsh-discord-bot',
   factory: function (require) {
     var React = require('react');
     var module = { exports: {} };
