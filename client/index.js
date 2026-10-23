@@ -106,6 +106,16 @@ window.__ModuleLoader__.load({
       fontSize: '12.5px',
       cursor: 'pointer'
     };
+    var successButtonStyle = {
+      padding: '7px 12px',
+      border: '1px solid #2f9e67',
+      borderRadius: '8px',
+      background: 'rgba(47, 158, 103, 0.16)',
+      color: '#2f9e67',
+      font: 'inherit',
+      fontSize: '12.5px',
+      cursor: 'pointer'
+    };
     var hintStyle = {
       margin: '0',
       color: 'var(--dsw-alias-label-tertiary)',
@@ -160,6 +170,46 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function Notice(props) {
+      if (!props.notice || !props.notice.text) return null;
+      var palettes = {
+        success: {
+          border: '1px solid #2f9e67',
+          background: 'rgba(47, 158, 103, 0.12)',
+          color: '#2f9e67'
+        },
+        error: {
+          border: '1px solid #e5484d',
+          background: 'rgba(229, 72, 77, 0.12)',
+          color: '#e5484d'
+        },
+        info: {
+          border: '1px solid var(--dsw-alias-border-l2)',
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-3) 35%, transparent)',
+          color: 'var(--dsw-alias-label-secondary)'
+        }
+      };
+      var palette = palettes[props.notice.kind] || palettes.info;
+      return h(
+        'div',
+        {
+          role: 'status',
+          'aria-live': 'polite',
+          style: {
+            padding: '10px 12px',
+            borderRadius: '9px',
+            border: palette.border,
+            background: palette.background,
+            color: palette.color,
+            fontSize: '12.5px',
+            lineHeight: 1.5,
+            fontWeight: 550
+          }
+        },
+        props.notice.text
+      );
+    }
+
     function DiscordBotSection(props) {
       var form = props.form;
       var credentials = props.credentials;
@@ -183,13 +233,25 @@ window.__ModuleLoader__.load({
       var tokenInfo = tokenInfoState[0];
       var setTokenInfo = tokenInfoState[1];
 
-      var messageState = React.useState('');
-      var message = messageState[0];
-      var setMessage = messageState[1];
+      var noticeState = React.useState(null);
+      var notice = noticeState[0];
+      var setNoticeState = noticeState[1];
+
+      var savedState = React.useState(false);
+      var saved = savedState[0];
+      var setSaved = savedState[1];
+
+      var tokenSavedState = React.useState(false);
+      var tokenSaved = tokenSavedState[0];
+      var setTokenSaved = tokenSavedState[1];
 
       var busyState = React.useState(false);
       var busy = busyState[0];
       var setBusy = busyState[1];
+
+      function setNotice(kind, text) {
+        setNoticeState({ kind: kind, text: text });
+      }
 
       React.useEffect(function () {
         if (snapshot.status === 'ready') setDraft(fromValue(snapshot.value));
@@ -216,6 +278,8 @@ window.__ModuleLoader__.load({
       }, [refreshToken]);
 
       function setField(field, value) {
+        setSaved(false);
+        setNotice(null, '');
         setDraft(function (previous) {
           var next = Object.assign({}, previous);
           next[field] = value;
@@ -224,8 +288,13 @@ window.__ModuleLoader__.load({
       }
 
       async function saveSettings() {
+        if (snapshot.writable === false) {
+          setNotice('error', '此 DSH profile 是唯讀，無法儲存設定。');
+          return;
+        }
         setBusy(true);
-        setMessage('');
+        setSaved(false);
+        setNotice('info', '儲存中…');
         try {
           var timeout = Number(draft.replyTimeoutMs);
           if (!Number.isSafeInteger(timeout) || timeout < 5000 || timeout > 600000) {
@@ -251,13 +320,15 @@ window.__ModuleLoader__.load({
           }
 
           var listsEmpty = splitIds(draft.guildIds).length === 0 || splitIds(draft.channelIds).length === 0;
-          setMessage(
+          setSaved(true);
+          setNotice(
+            'success',
             listsEmpty
-              ? '已儲存；但 guildIds / channelIds 空值時 bot 不會連線。'
-              : '設定已儲存。DSH 重新載入 plugin 後生效。'
+              ? '設定已儲存，但 guildIds / channelIds 空值時 bot 不會連線。'
+              : '設定已儲存到 DSH profile。重啟 DSH 後由 host plugin 套用。'
           );
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : String(error));
+          setNotice('error', '儲存失敗：' + (error instanceof Error ? error.message : String(error)));
         } finally {
           setBusy(false);
         }
@@ -266,18 +337,20 @@ window.__ModuleLoader__.load({
       async function saveToken() {
         var value = token.trim();
         if (!value) {
-          setMessage('Token 不能為空');
+          setNotice('error', 'Token 不能為空。');
           return;
         }
         setBusy(true);
-        setMessage('');
+        setTokenSaved(false);
+        setNotice('info', 'Token 儲存中…');
         try {
           await credentials.set(TOKEN_REF, value);
           setToken('');
+          setTokenSaved(true);
           await refreshToken();
-          setMessage('Token 已儲存到 DSH credentials。重啟 DSH 後套用。');
+          setNotice('success', 'Token 已儲存到 DSH credentials。重啟 DSH 後才會重新連線。');
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : String(error));
+          setNotice('error', 'Token 儲存失敗：' + (error instanceof Error ? error.message : String(error)));
         } finally {
           setBusy(false);
         }
@@ -285,13 +358,14 @@ window.__ModuleLoader__.load({
 
       async function clearToken() {
         setBusy(true);
-        setMessage('');
+        setTokenSaved(false);
+        setNotice('info', '清除 Token 中…');
         try {
           await credentials.unset(TOKEN_REF);
           await refreshToken();
-          setMessage('Token 已清除。');
+          setNotice('success', 'Token 已清除。');
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : String(error));
+          setNotice('error', 'Token 清除失敗：' + (error instanceof Error ? error.message : String(error)));
         } finally {
           setBusy(false);
         }
@@ -324,6 +398,11 @@ window.__ModuleLoader__.load({
             '連線 Discord 到這台 DSH 的 local session。Token 存在 DSH credentials，其餘設定存在 profile。'
           )
         ),
+        h(Notice, {
+          notice: notice || (snapshot.writable === false
+            ? { kind: 'error', text: '此 DSH profile 目前是唯讀，無法儲存設定。' }
+            : null)
+        }),
         h('section', { style: cardStyle },
           h('h3', { style: sectionTitleStyle }, 'Discord 連線'),
           h('div', { style: rowStyle },
@@ -332,15 +411,19 @@ window.__ModuleLoader__.load({
               value: token,
               autoComplete: 'new-password',
               placeholder: tokenInfo.configured ? '已設定；輸入新 token 可覆蓋' : 'Discord bot token',
-              onChange: function (event) { setToken(event.target.value); },
+              onChange: function (event) {
+                setToken(event.target.value);
+                setTokenSaved(false);
+                setNotice(null, '');
+              },
               style: Object.assign({}, inputStyle, { flex: '1 1 260px' })
             }),
             h('button', {
               type: 'button',
-              disabled: busy || token.trim() === '',
+              disabled: busy || token.trim() === '' || tokenInfo.loading || tokenInfo.writable === false,
               onClick: saveToken,
-              style: primaryButtonStyle
-            }, '儲存 Token'),
+              style: tokenSaved ? successButtonStyle : primaryButtonStyle
+            }, tokenSaved ? 'Token 已儲存 ✓' : '儲存 Token'),
             h('button', {
               type: 'button',
               disabled: busy || !tokenInfo.configured,
@@ -348,7 +431,13 @@ window.__ModuleLoader__.load({
               style: secondaryButtonStyle
             }, '清除'),
             h('span', { style: badgeStyle },
-              tokenInfo.loading ? '檢查中' : tokenInfo.configured ? '已設定' : '未設定'
+              tokenInfo.loading
+                ? '檢查中'
+                : tokenInfo.configured
+                  ? '已設定'
+                  : tokenInfo.writable === false
+                    ? 'credentials 唯讀'
+                    : '未設定'
             )
           ),
           h('p', { style: hintStyle },
@@ -458,11 +547,17 @@ window.__ModuleLoader__.load({
         h('div', { style: rowStyle },
           h('button', {
             type: 'button',
-            disabled: busy,
+            disabled: busy || snapshot.writable === false,
             onClick: saveSettings,
-            style: primaryButtonStyle
-          }, busy ? '儲存中…' : '儲存設定'),
-          h('span', { style: statusStyle, role: 'status', 'aria-live': 'polite' }, message)
+            style: saved ? successButtonStyle : primaryButtonStyle
+          }, saved ? '已儲存 ✓' : busy ? '儲存中…' : '儲存設定'),
+          h('span', { style: statusStyle },
+            snapshot.writable === false
+              ? 'profile 唯讀'
+              : snapshot.revision === undefined
+                ? '等待 DSH settings 同步'
+                : 'settings revision ' + snapshot.revision
+          )
         )
       );
     }
