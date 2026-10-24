@@ -269,12 +269,20 @@ export class LocalSessionBackend implements MessageHandler {
     content: readonly { type: 'text'; text: string }[]
   ): Promise<void> {
     if (!this.agents) throw new Error('DSH agents service is unavailable');
-    let handle = this.agents.get(sessionId);
-    if (!handle) {
-      handle = await this.agents.resume({ resumeSessionId: sessionId });
-      this.resumedHandles.set(sessionId, handle);
+    const message = {
+      id: randomUUID(),
+      role: 'user' as const,
+      content,
+      source: { kind: 'user' as const }
+    };
+    const live = this.agents.get(sessionId);
+    if (live) {
+      live.followup(message);
+      return;
     }
-    handle.agent.followup({ content, source: { kind: 'user' } });
+    const handle = await this.agents.resume({ resumeSessionId: sessionId });
+    this.resumedHandles.set(sessionId, handle);
+    handle.agent.followup(message);
   }
 
   private async applyModelSelection(sessionId: string): Promise<void> {

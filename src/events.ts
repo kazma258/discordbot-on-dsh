@@ -4,7 +4,8 @@ import type { SessionEventHandler, SessionEventLike } from './types.js';
 export class SessionEventBus {
   private readonly handlers = new Map<string, Set<SessionEventHandler>>();
 
-  subscribe(sessionId: string, handler: SessionEventHandler): () => void {
+  // Arrow so `bus.subscribe` keeps `this` when passed as a callback.
+  subscribe = (sessionId: string, handler: SessionEventHandler): (() => void) => {
     let set = this.handlers.get(sessionId);
     if (!set) {
       set = new Set();

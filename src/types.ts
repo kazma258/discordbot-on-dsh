@@ -49,6 +49,8 @@ export interface SessionControllerLike {
 
 export interface AgentLike {
   followup(input: {
+    id: string;
+    role: 'user';
     content: readonly { type: 'text'; text: string }[];
     source: { kind: 'user' };
   }): void;
@@ -59,9 +61,12 @@ export interface AgentHandleLike {
   dispose(): Promise<void>;
 }
 
-/** Host agent registry used instead of the Remote-only session prompt facade. */
+/**
+ * Host agent registry. `get` returns the live agent itself.
+ * `resume` returns an owned handle; only that path has `.agent`.
+ */
 export interface AgentServiceLike {
-  get(sessionId: string): AgentHandleLike | undefined;
+  get(sessionId: string): AgentLike | undefined;
   resume(options: { resumeSessionId: string }): Promise<AgentHandleLike>;
 }
 
