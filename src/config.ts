@@ -6,6 +6,7 @@ export interface DiscordPluginConfig {
   readonly presetId: string;
   readonly replyTimeoutMs: number;
   readonly modelSelection?: ModelSelection;
+  readonly commandStatusPath?: string;
 }
 
 /** Shape of the plugin row's non-secret config in cordis.patch.yml. */

@@ -1,3 +1,6 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 import {
   Client,
   Events,
@@ -45,6 +48,10 @@ export function outboundReplyForTagged(reply: string | null): string {
 
 export class DiscordBridge {
   private readonly client: Client;
+  private readonly commandStatus: Record<
+    string,
+    { at: string; commands: Record<string, { status: string; error?: string }> }
+  > = {};
 
   constructor(
     private readonly config: DiscordPluginConfig,
@@ -108,14 +115,19 @@ export class DiscordBridge {
     try {
       const existing = await guild.commands.fetch();
       for (const name of ACCESS_COMMAND_NAMES) {
-        if (existing.some((command) => command.name === name)) continue;
+        if (existing.some((command) => command.name === name)) {
+          this.recordCommandStatus(guild.id, name, 'existing');
+          continue;
+        }
         try {
           await guild.commands.create(buildAccessCommand(name));
+          this.recordCommandStatus(guild.id, name, 'created');
           this.logger.info('registered Discord access command', {
             guildId: guild.id,
             name
           });
         } catch (error) {
+          this.recordCommandStatus(guild.id, name, 'error', error);
           this.logger.warn('failed to register Discord access command', {
             guildId: guild.id,
             name,
@@ -124,10 +136,41 @@ export class DiscordBridge {
         }
       }
     } catch (error) {
+      this.recordCommandStatus(guild.id, '*', 'fetch-error', error);
       this.logger.warn('failed to inspect guild commands', {
         guildId: guild.id,
         error
       });
+    }
+  }
+
+  private recordCommandStatus(
+    guildId: string,
+    name: string,
+    status: string,
+    error?: unknown
+  ): void {
+    const path = this.config.commandStatusPath;
+    if (!path) return;
+    const entry = this.commandStatus[guildId] ?? { at: '', commands: {} };
+    entry.at = new Date().toISOString();
+    entry.commands[name] = {
+      status,
+      ...(error === undefined
+        ? {}
+        : { error: error instanceof Error ? error.message : String(error) })
+    };
+    this.commandStatus[guildId] = entry;
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(
+        path,
+        JSON.stringify({ at: new Date().toISOString(), guilds: this.commandStatus }, null, 2) +
+          '\n',
+        { encoding: 'utf8', mode: 0o600 }
+      );
+    } catch {
+      // Diagnostics must never affect Discord handling.
     }
   }
 

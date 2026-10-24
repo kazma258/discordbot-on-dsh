@@ -89,7 +89,7 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 /deeplook mode:off
 ```
 
-`/大肥魚` 是同功能的別名。Discord slash command 不支援真正的 trailing text，所以 `off` 是 `mode` option；bare `/deeplook` 仍可直接開啟。
+Discord slash command 不支援真正的 trailing text，所以 `off` 是 `mode` option；bare `/deeplook` 仍可直接開啟。
 
 - 權限狀態存在 `~/.dsh/discord-bot/access.json`，重啟後保留。
 - 只有執行指令的那個 channel 會切換；其他 channel 不受影響。
@@ -97,6 +97,8 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 - 指令會以 ephemeral 訊息回覆成功或權限錯誤。
 - bot 的邀請連結必須包含 `bot` 與 `applications.commands` scope，slash command 才會出現。
 - 指令的 runtime 檢查要求 `Administrator`；只有 `Manage Server` 不足。
+- 註冊結果會寫到 `~/.dsh/discord-bot/commands.json`（`created`／`existing`／`error`／`fetch-error`）。若 Discord 沒顯示命令，先看這個檔與 bot 的邀請 scope。
+- Discord 客戶端可能需要重新整理或稍等才會顯示新註冊的 guild command。
 
 進階／fallback 才需要手動覆寫：
 

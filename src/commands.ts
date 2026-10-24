@@ -27,7 +27,7 @@ export function isAdministrator(
 export function buildAccessCommand(name: (typeof ACCESS_COMMAND_NAMES)[number]) {
   return new SlashCommandBuilder()
     .setName(name)
-    .setDescription('開啟或關閉此頻道的讀取；省略 mode 預設為 on')
+    .setDescription('開啟或關閉此頻道的 DSH 聊天；省略 mode 預設為 on')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption((option) =>
       option

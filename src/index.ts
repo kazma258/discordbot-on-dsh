@@ -310,7 +310,8 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         discordToken: token,
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
-        modelSelection
+        modelSelection,
+        commandStatusPath: join(baseDir, 'commands.json')
       };
       bridge = new DiscordBridge(config, backend, access, logger);
       await bridge.start();
