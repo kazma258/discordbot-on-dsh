@@ -37,13 +37,17 @@ function displayName(user: Pick<User, 'globalName' | 'username'>): string {
 export const TAGGED_SILENT_FALLBACK = '？';
 
 /**
- * A tag must always produce something visible. If the model chose [SILENT]
- * (removed by cleanDshReply) or returned nothing, fall back to a minimal
- * in-character acknowledgement instead of silently ignoring the tag.
+ * An optional reply is sent whenever the model produced text; an empty/[SILENT]
+ * reply stays silent. A required (tag/reply) turn always produces something,
+ * falling back to a minimal acknowledgement if the model stayed silent.
  */
-export function outboundReplyForTagged(reply: string | null): string {
+export function outboundReply(
+  reply: string | null,
+  replyRequired: boolean
+): string | null {
   const text = typeof reply === 'string' ? reply.trim() : '';
-  return text === '' ? TAGGED_SILENT_FALLBACK : text;
+  if (text !== '') return text;
+  return replyRequired ? TAGGED_SILENT_FALLBACK : null;
 }
 
 export class DiscordBridge {
@@ -324,27 +328,20 @@ export class DiscordBridge {
     };
 
     const reply = await this.handler.onMessage(incoming);
+    const outbound = outboundReply(reply, decision.replyRequired);
+    if (outbound === null) return;
 
-    if (!decision.replyRequired) {
-      if (typeof reply === 'string' && reply.trim() !== '') {
-        this.logger.warn('discarded non-trigger reply', {
-          channelId: message.channelId,
-          messageId: message.id
-        });
-      }
-      return;
-    }
-
-    const channel = message.channel as GuildTextBasedChannel;
-    if (!channel.isTextBased()) return;
-
-    if (typeof reply !== 'string' || reply.trim() === '') {
+    if (decision.replyRequired && (typeof reply !== 'string' || reply.trim() === '')) {
       this.logger.warn('tagged message produced no reply; sending fallback', {
         channelId: message.channelId,
         messageId: message.id
       });
     }
-    await sendReply(this.asSendable(channel), outboundReplyForTagged(reply), {
+
+    const channel = message.channel as GuildTextBasedChannel;
+    if (!channel.isTextBased()) return;
+
+    await sendReply(this.asSendable(channel), outbound, {
       logger: this.logger
     });
   }

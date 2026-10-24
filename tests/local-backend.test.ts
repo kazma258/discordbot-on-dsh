@@ -181,7 +181,7 @@ describe('LocalSessionBackend', () => {
     });
   });
 
-  it('marks observation-only messages with [僅記錄]', async () => {
+  it('marks optional messages with [可回覆]', async () => {
     await withTempDir(async (directory) => {
       const bus = new EventBus();
       const controller = new FakeController(bus);
@@ -190,7 +190,7 @@ describe('LocalSessionBackend', () => {
 
       await backend.onMessage({ ...MESSAGE, replyRequired: false });
 
-      expect(controller.prompts[0]).toContain('[僅記錄]');
+      expect(controller.prompts[0]).toContain('[可回覆]');
       await backend.stop();
     });
   });

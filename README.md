@@ -24,10 +24,10 @@ tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以�
 ```bash
 # 在 repo 根目錄
 npm run pack:discord-bot
-# 產物：packs/local-dsh-discord-bot-0.4.0.tgz
+# 產物：packs/local-dsh-discord-bot-0.4.1.tgz
 
 # 複製 tarball 到目標 DSH 後：
-dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.4.0.tgz
+dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.4.1.tgz
 ```
 
 安裝後 DSH profile 會多出：
@@ -91,6 +91,8 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 
 Discord slash command 不支援真正的 trailing text，所以 `off` 是 `mode` option；bare `/deeplook` 仍可直接開啟。
 
+- `/deeplook` 只決定 bot 是否看到該 channel，**不決定 bot 是否回應**；回不回由角色提示詞自行判斷。
+- 只有 @bot 或被 bot 回覆的訊息是強制回覆；其他訊息模型可以回，也可以輸出 `[SILENT]`。
 - 權限狀態存在 `~/.dsh/discord-bot/access.json`，重啟後保留。
 - 只有執行指令的那個 channel 會切換；其他 channel 不受影響。
 - Discord 身份組／頻道權限仍然決定 bot 是否看得到該頻道。
@@ -128,7 +130,7 @@ Discord Gateway
 - 新 session 的標題：`[GuildName]ChannelName`。
 - 重啟 DSH 後會透過 `SessionController` 的 resume 路徑接回 mapping 的 sessionId；它會重新 compose preset，所以 `discord-whale` persona 會保留。不要直接呼叫 `agents.resume()`，那條路不會 compose persona。
 - resume 失敗時才重建 session；`commands.json` 與 `last-message.json` 可用来診斷。
-- 非 tag 訊息仍送進 DSH（`[僅記錄]`），但回覆在階段一丟棄。
+- 非 tag 訊息以 `[可回覆]` 送進 DSH；模型可依角色自行決定回覆，若回覆有文字就發到 Discord，`[SILENT]` 才不送。
 - tagged turn 若模型回 `[SILENT]`／空字串，會發 `？`，不會靜默忽略。
 
 ## 測試

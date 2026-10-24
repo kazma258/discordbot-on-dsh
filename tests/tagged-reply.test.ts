@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { outboundReplyForTagged, TAGGED_SILENT_FALLBACK } from '../src/bot.js';
+import { outboundReply, TAGGED_SILENT_FALLBACK } from '../src/bot.js';
 
-describe('outboundReplyForTagged', () => {
-  it('falls back when a tagged turn produced no visible reply', () => {
-    expect(outboundReplyForTagged(null)).toBe(TAGGED_SILENT_FALLBACK);
-    expect(outboundReplyForTagged('')).toBe(TAGGED_SILENT_FALLBACK);
-    expect(outboundReplyForTagged('   ')).toBe(TAGGED_SILENT_FALLBACK);
+describe('outboundReply', () => {
+  it('sends a real reply for optional and required turns', () => {
+    expect(outboundReply('在', false)).toBe('在');
+    expect(outboundReply('在', true)).toBe('在');
   });
 
-  it('preserves a real reply', () => {
-    expect(outboundReplyForTagged('在')).toBe('在');
+  it('falls back only when a required turn produced no visible reply', () => {
+    expect(outboundReply(null, true)).toBe(TAGGED_SILENT_FALLBACK);
+    expect(outboundReply('   ', true)).toBe(TAGGED_SILENT_FALLBACK);
+    expect(outboundReply(null, false)).toBeNull();
+    expect(outboundReply('', false)).toBeNull();
   });
 });

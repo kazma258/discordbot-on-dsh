@@ -1,13 +1,13 @@
 export const SILENT_TOKEN = '[SILENT]';
 
 export function formatDshPrompt(normalizedMessage: string, replyRequired: boolean): string {
-  const marker = replyRequired ? '[需回覆]' : '[僅記錄]';
+  const marker = replyRequired ? '[需回覆]' : '[可回覆]';
   return `${marker} ${normalizedMessage}`;
 }
 
 /**
- * `[SILENT]` is the model's way of saying "I read it but have nothing to say".
- * Remove it; if the remaining text is empty, the bridge sends nothing.
+ * `[SILENT]` is the model's way of saying "I read it but choose not to reply".
+ * Remove it; an empty result means no Discord message for optional replies.
  */
 export function cleanDshReply(text: string): string | null {
   const cleaned = text.replaceAll(SILENT_TOKEN, '').trim();
