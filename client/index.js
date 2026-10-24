@@ -249,7 +249,7 @@ window.__ModuleLoader__.load({
       var busy = busyState[0];
       var setBusy = busyState[1];
 
-      var catalogState = React.useState({ status: 'loading', groups: [], failures: [] });
+      var catalogState = React.useState({ status: 'loading', groups: [], failures: [], default: null });
       var catalog = catalogState[0];
       var setCatalog = catalogState[1];
 
@@ -282,7 +282,7 @@ window.__ModuleLoader__.load({
       }, [refreshToken]);
 
       var loadCatalog = React.useCallback(async function () {
-        setCatalog({ status: 'loading', groups: [], failures: [] });
+        setCatalog({ status: 'loading', groups: [], failures: [], default: null });
         try {
           var response = await fetch('/discord-bot/models', {
             method: 'GET',
@@ -303,13 +303,15 @@ window.__ModuleLoader__.load({
             groups: groups,
             failures: Array.isArray(body.catalog && body.catalog.failures)
               ? body.catalog.failures
-              : []
+              : [],
+            default: body.catalog && body.catalog.default ? body.catalog.default : null
           });
         } catch (error) {
           setCatalog({
             status: 'error',
             groups: [],
             failures: [],
+            default: null,
             message: error instanceof Error ? error.message : String(error)
           });
         }
@@ -632,7 +634,10 @@ window.__ModuleLoader__.load({
                 : catalog.status === 'error'
                   ? '模型目錄讀取失敗：' + (catalog.message || 'unknown') + '；目前使用手動輸入。'
                   : '模型目錄：' + providerGroups.length + ' providers' +
-                    (catalog.failures.length > 0 ? '，' + catalog.failures.length + ' 個 provider 讀取失敗' : '')
+                    (catalog.failures.length > 0 ? '，' + catalog.failures.length + ' 個 provider 讀取失敗' : '') +
+                    (catalog.default
+                      ? '；系統預設：' + [catalog.default.provider, catalog.default.model, catalog.default.reasoningEffort].filter(Boolean).join(' / ')
+                      : '')
             ),
             h('button', {
               type: 'button',

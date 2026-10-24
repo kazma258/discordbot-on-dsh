@@ -24,10 +24,10 @@ tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以�
 ```bash
 # 在 repo 根目錄
 npm run pack:discord-bot
-# 產物：packs/local-dsh-discord-bot-0.2.8.tgz
+# 產物：packs/local-dsh-discord-bot-0.2.9.tgz
 
 # 複製 tarball 到目標 DSH 後：
-dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.2.8.tgz
+dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.2.9.tgz
 ```
 
 安裝後 DSH profile 會多出：
@@ -62,15 +62,17 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 | Guild IDs | 每行一個或逗號分隔；空值 fail closed |
 | Channel IDs | 允許回覆的頻道 |
 | Owner User ID | 保留給 owner-only 功能，可留空 |
-| Provider | 例如 `dsh-opencode-go`、`deepseek-official` |
-| Model | 例如 `deepseek-v4.1-flash` |
-| Reasoning Effort | 預設／off／low／high／max |
+| Provider | 從 DSH model catalog 讀取的下拉選單（`deepseek-official`、`dsh-opencode-go` 等） |
+| Model | 依 provider 顯示可用 model 的下拉選單 |
+| Reasoning Effort | 依目前 model 的 catalog metadata 顯示可選 effort |
 | Agent Preset | 預設 `discord-whale` |
 | Reply Timeout | 5000–600000 ms |
 | Log Level | debug／info／warn／error |
 
 - 非秘密設定透過 DSH settings 寫回 profile patch；卡片是主要設定方式。
 - `DISCORD_TOKEN` 只存 credentials；若 credentials 沒有值，host 仍會 fallback 到 process env。
+- 卡片透過 host 的 `GET /discord-bot/models` 讀 `sessionController.modelCatalog()`；provider/model/effort 選單直接使用系統現有 catalog。
+- 若 catalog route 失敗（例如舊版 host），卡片 fallback 成手動文字輸入，不會擋住其他設定。
 - 模型欄位留空 = 使用 DSH 預設模型；有填 provider + model 時，backend 會在每次 prompt 前呼叫 `sessionController.selectModel`。
 - Token 或設定變更後若 DSH 沒有自動 reload plugin，重啟 DSH 讓 Discord 重新連線。
 - 不要把 token 放進 `cordis.patch.yml` 或版本庫。
