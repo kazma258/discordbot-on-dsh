@@ -95,6 +95,8 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 - 只有執行指令的那個 channel 會切換；其他 channel 不受影響。
 - Discord 身份組／頻道權限仍然決定 bot 是否看得到該頻道。
 - 指令會以 ephemeral 訊息回覆成功或權限錯誤。
+- bot 的邀請連結必須包含 `bot` 與 `applications.commands` scope，slash command 才會出現。
+- 指令的 runtime 檢查要求 `Administrator`；只有 `Manage Server` 不足。
 
 進階／fallback 才需要手動覆寫：
 
