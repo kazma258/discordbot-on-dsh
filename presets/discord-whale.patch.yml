@@ -6,7 +6,7 @@
       config:
         id: discord-whale
         name: Discord 小鯨魚
-        description: Discord 橋接用的受限聊天角色；沒有 shell、檔案或子代理工具。
+        description: Discord 橋接角色；工具只在本頻道 container 內執行，沒有 host shell／檔案工具。
         order: 20
         plugins:
           - id: persona
@@ -198,6 +198,10 @@
                 - 不要使用 Markdown；不要 @everyone、身分組或使用者。
               complete: true
               includeRuntimeContext: false
+          - id: container-tools
+            name: '@local/dsh-discord-bot/container-tools'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
           - id: compaction
             name: cordis:group
             group: true

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import z from '@deepseek-ai/schemastery';
@@ -11,6 +12,7 @@ import { DiscordBridge } from './bot.js';
 import type { DiscordPluginConfig, DiscordPluginSettings } from './config.js';
 import { SessionEventBus } from './events.js';
 import { createLogger, isLogLevel, type Logger } from './logger.js';
+import { ContainerToolService, containerImageTag } from './container/service.js';
 import type { SessionControllerLike, SessionEventLike } from './types.js';
 
 interface PluginLogger {
@@ -58,6 +60,7 @@ interface PluginContext {
     handler: (session: { id: string }, event: SessionEventLike) => void
   ): () => void;
   effect(factory: () => () => void | Promise<void>, label?: string): void;
+  provide(name: string, value: unknown): () => void;
 }
 
 export const name = 'discord-bot';
@@ -248,7 +251,37 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   let backend: LocalSessionBackend | undefined;
   let disposed = false;
 
+  const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+
   ctx.effect(() => {
+    const containerService = new ContainerToolService({
+      baseDir,
+      containerDir: join(packageRoot, 'container'),
+      image: containerImageTag('0.5.0'),
+      uid: 1000,
+      gid: 1000,
+      idleMs: 15 * 60_000,
+      limits: { memory: '512m', pids: 256, cpus: 1, tmpfsSize: '64m' },
+      quotaBytes: 256 * 1024 * 1024,
+      logger
+    });
+    ctx.provide('discordBotContainers', containerService);
+    const writeContainerStatus = (): void => {
+      try {
+        writeFileSync(
+          join(baseDir, 'container.json'),
+          JSON.stringify(
+            { at: new Date().toISOString(), ...containerService.status() },
+            null,
+            2
+          ) + '\n',
+          { encoding: 'utf8', mode: 0o600 }
+        );
+      } catch (error) {
+        logger.warn('failed to write container status', { error });
+      }
+    };
+    void containerService.ready.then(writeContainerStatus);
     void (async () => {
       const token = await resolveDiscordToken(ctx, logger);
       writeStatus('token-resolved', { tokenConfigured: token !== '' });
@@ -275,6 +308,13 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         logger,
         statePath: join(baseDir, 'sessions.json'),
         agentsDir: join(baseDir, 'agents'),
+        workspacesDir: join(baseDir, 'workspaces'),
+        onSessionBound: (sessionId, channelId, workspace) => {
+          containerService.bindSession(sessionId, { channelId, workspace });
+        },
+        onSessionRetired: (sessionId) => {
+          containerService.unbindSession(sessionId);
+        },
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
         modelSelection,
@@ -310,8 +350,11 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
       await bridge.start();
       writeStatus('started', {
         tokenConfigured: true,
-        enabledChannels: [...access.enabledChannels()].length
+        enabledChannels: [...access.enabledChannels()].length,
+        containerTools: containerService.available,
+        containerEngine: containerService.status().engine?.kind ?? 'none'
       });
+      writeContainerStatus();
       logger.info('Discord plugin started', {
         preset: settings.preset,
         enabledChannels: [...access.enabledChannels()].length
@@ -335,6 +378,11 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         await backend?.stop();
       } catch (error) {
         logger.error('failed to stop local session backend', { error });
+      }
+      try {
+        await containerService.dispose();
+      } catch (error) {
+        logger.error('failed to dispose container tools', { error });
       }
       bus.clear();
     };

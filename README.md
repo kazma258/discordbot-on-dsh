@@ -4,7 +4,7 @@ DSH Host plugin + Web client Settings 卡片：把 Discord 接上**安裝它的�
 
 - 不使用遠端 DSH、不需要 `DSH_COOKIE`。
 - 要讓 bot 跑在遠端 DSH，就把這個 plugin 裝在那台遠端 DSH。
-- 內含 `discord-whale` 受限 preset（persona + compaction，沒有 shell／檔案工具）。
+- 內含 `discord-whale` 受限 preset（persona + compaction + container 工具）；沒有 host shell／host fs 工具。
 - 遠端 DSH 連線是另一個獨立 plugin `dsh-remote`，不是這個 plugin 的依賴。
 
 ## 為什麼不能直接 `dsh plugin add` 原始碼？
@@ -17,17 +17,17 @@ DSH 載入的是 package 的 `main`（`./lib/index.js`）與 `dsh.bundle.patch` 
 - `tsc` → `lib/`
 - 從 `persona/character.md` 重新產生 `presets/discord-whale.patch.yml`
 
-tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以目標 DSH 不需要 Node build。
+tarball 內已含 `lib/`、`container/`、`client/`、`cordis.patch.yml`、`presets/`，所以目標 DSH 不需要 Node build。
 
 ## 安裝（建議：打包後安裝）
 
 ```bash
 # 在 repo 根目錄
 npm run pack:discord-bot
-# 產物：packs/local-dsh-discord-bot-0.4.1.tgz
+# 產物：packs/local-dsh-discord-bot-0.5.0.tgz
 
 # 複製 tarball 到目標 DSH 後：
-dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.4.1.tgz
+dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.5.0.tgz
 ```
 
 安裝後 DSH profile 會多出：
@@ -112,6 +112,21 @@ Discord slash command 不支援真正的 trailing text，所以 `off` 是 `mode`
     reasoningEffort: low
 ```
 
+## Container 工具與 workspace
+
+`discord-whale` 只掛載 plugin 自己註冊的容器工具；沒有 host `tool-bash`、`tool-fs` 或 `tool-fs-search`。
+
+- 每個 channel 一個 workspace：`~/.dsh/discord-bot/workspaces/<channelId>`。
+- 容器 image 由 plugin 內建 Dockerfile 在第一次使用時 build；基底 digest 已鎖定。
+- 優先使用 rootless Podman；沒有時 fallback 到 Docker，rootful 會印警告。
+- 容器 `--network none`、非 root、read-only rootfs、`cap-drop ALL`、`no-new-privileges`、memory/pids/tmpfs 限制、只 bind 該 channel workspace。
+- `container_bash`、`container_read`、`container_write`、`container_edit`、`container_list`、`container_glob`、`container_grep` 都經同一 container service。
+- `web_fetch`／`web_search` 仍由 DSH host 提供。
+- 找不到 engine、image build 失敗或 container 啟動失敗時，container tools fail closed，不會降級 host shell。
+- 診斷：`~/.dsh/discord-bot/container.json`。
+- 同 channel 指令串行；閒置 15 分鐘 stop；timeout 會重建該 channel 容器。
+- 主 DSH 與 dev agent 同 process/uid；這是 v1 的已知限制，不是完整 OS 隔離。
+
 ## 運作方式
 
 ```text
@@ -126,7 +141,7 @@ Discord Gateway
 
 - session mapping：`~/.dsh/discord-bot/sessions.json`
 - access state：`~/.dsh/discord-bot/access.json`
-- session cwd：`~/.dsh/discord-bot/agents`
+- session cwd：`~/.dsh/discord-bot/workspaces/<channelId>`；舊 session 若仍指向 `agents` 會保留歷史並 log warning。
 - 新 session 的標題：`[GuildName]ChannelName`。
 - 重啟 DSH 後會透過 `SessionController` 的 resume 路徑接回 mapping 的 sessionId；它會重新 compose preset，所以 `discord-whale` persona 會保留。不要直接呼叫 `agents.resume()`，那條路不會 compose persona。
 - resume 失敗時才重建 session；`commands.json` 與 `last-message.json` 可用来診斷。
@@ -140,7 +155,7 @@ npm run typecheck --workspace @local/dsh-discord-bot
 npm test --workspace @local/dsh-discord-bot
 ```
 
-涵蓋：訊息正規化、channel access toggle、slash command 參數、標題格式、session resume、2000 字拆分、allowedMentions、model selection。
+涵蓋：訊息正規化、channel access toggle、slash command 參數、標題格式、session resume、per-channel workspace、container engine/manager/tools、2000 字拆分、allowedMentions、model selection。
 
 ## Live 狀態
 
@@ -154,4 +169,6 @@ npm test --workspace @local/dsh-discord-bot
 
 - `/deeplook`、`/大肥魚` 的 guild command 註冊與權限檢查
 - `[GuildName]ChannelName` 標題
-- 重啟後 `agents.resume()` 是否保留舊對話
+- 重啟後 SessionController resume 是否保留舊對話
+- `/deeplook` 開啟後 container_bash/read/write 與 workspace 隔離
+- 無 Docker/Podman 時 container tools 是否 fail closed

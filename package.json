@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-discord-bot",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "DSH Host plugin: connect Discord to the local DSH chat session",
@@ -12,10 +12,14 @@
     "./client": {
       "default": "./client/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./container-tools": {
+      "default": "./lib/container-tools.js"
+    }
   },
   "files": [
     "lib",
+    "container",
     "client",
     "cordis.patch.yml",
     "presets",

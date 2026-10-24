@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { Logger } from '../logger.js';
 import { cleanDshReply, formatDshPrompt } from '../prompt.js';
@@ -22,6 +22,14 @@ export interface LocalBackendOptions {
   readonly logger: Logger;
   readonly statePath: string;
   readonly agentsDir: string;
+  /** Root for per-channel workspaces. Defaults to <agentsDir>/workspaces. */
+  readonly workspacesDir?: string;
+  readonly onSessionBound?: (
+    sessionId: string,
+    channelId: string,
+    workspace: string
+  ) => void;
+  readonly onSessionRetired?: (sessionId: string) => void;
   readonly presetId?: string;
   readonly replyTimeoutMs?: number;
   readonly modelSelection?: ModelSelection;
@@ -77,6 +85,9 @@ export class LocalSessionBackend implements MessageHandler {
   private readonly logger: Logger;
   private readonly statePath: string;
   private readonly agentsDir: string;
+  private readonly workspacesDir: string;
+  private readonly onSessionBound?: LocalBackendOptions['onSessionBound'];
+  private readonly onSessionRetired?: LocalBackendOptions['onSessionRetired'];
   private readonly presetId: string;
   private readonly replyTimeoutMs: number;
   private readonly modelSelection?: ModelSelection;
@@ -93,6 +104,9 @@ export class LocalSessionBackend implements MessageHandler {
     this.logger = options.logger;
     this.statePath = options.statePath;
     this.agentsDir = options.agentsDir;
+    this.workspacesDir = options.workspacesDir ?? join(options.agentsDir, 'workspaces');
+    this.onSessionBound = options.onSessionBound;
+    this.onSessionRetired = options.onSessionRetired;
     this.presetId = options.presetId ?? 'discord-whale';
     this.replyTimeoutMs = options.replyTimeoutMs ?? 120_000;
     this.modelSelection = options.modelSelection;
@@ -102,6 +116,7 @@ export class LocalSessionBackend implements MessageHandler {
 
   async start(): Promise<void> {
     mkdirSync(this.agentsDir, { recursive: true });
+    mkdirSync(this.workspacesDir, { recursive: true, mode: 0o700 });
     this.records = loadSessionState(this.statePath, this.logger);
     this.logger.info('Discord local backend ready', {
       preset: this.presetId,
@@ -139,7 +154,10 @@ export class LocalSessionBackend implements MessageHandler {
       pending.reject(new Error('Discord local backend stopped'));
       this.pending.delete(channelId);
     }
-    for (const connection of this.connections.values()) connection.unsubscribe();
+    for (const connection of this.connections.values()) {
+      connection.unsubscribe();
+      this.onSessionRetired?.(connection.sessionId);
+    }
     this.connections.clear();
     this.logger.info('Discord local backend stopped');
   }
@@ -372,6 +390,15 @@ export class LocalSessionBackend implements MessageHandler {
       record = await this.createSession(channelId, title);
     }
 
+    if (record.cwd === this.agentsDir) {
+      this.logger.warn('session uses the legacy shared workspace; keeping history', {
+        channelId,
+        sessionId: record.sessionId,
+        cwd: record.cwd
+      });
+    }
+    this.onSessionBound?.(record.sessionId, channelId, record.cwd);
+
     const connection: Connection = {
       sessionId: record.sessionId,
       unsubscribe: this.subscribeSessionEvents(record.sessionId, (event) => {
@@ -401,10 +428,18 @@ export class LocalSessionBackend implements MessageHandler {
     }
   }
 
+  private workspaceFor(channelId: string): string {
+    if (!/^\d{5,}$/.test(channelId)) throw new Error('invalid Discord channel id');
+    const workspace = join(this.workspacesDir, channelId);
+    mkdirSync(workspace, { recursive: true, mode: 0o700 });
+    return workspace;
+  }
+
   private async createSession(channelId: string, title: string): Promise<SessionRecord> {
     if (this.ensurePreset) await this.ensurePreset();
+    const workspace = this.workspaceFor(channelId);
     const value = await this.controller.create({
-      cwd: this.agentsDir,
+      cwd: workspace,
       agentPreset: this.presetId
     });
 
@@ -419,7 +454,7 @@ export class LocalSessionBackend implements MessageHandler {
     const record: SessionRecord = {
       sessionId: value.sessionId,
       preset: this.presetId,
-      cwd: this.agentsDir,
+      cwd: workspace,
       updatedAt: Date.now()
     };
     this.records.set(channelId, record);
@@ -445,6 +480,7 @@ export class LocalSessionBackend implements MessageHandler {
     if (connection) {
       connection.unsubscribe();
       this.connections.delete(channelId);
+      this.onSessionRetired?.(connection.sessionId);
     }
     this.failPending(channelId, new Error('DSH session retired'));
     if (this.records.delete(channelId)) {

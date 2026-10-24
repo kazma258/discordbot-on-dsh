@@ -54,6 +54,7 @@ class EventBus {
 class FakeController implements SessionControllerLike {
   creates = 0;
   turn = 0;
+  readonly cwds: string[] = [];
   readonly prompts: string[] = [];
   readonly cancels: string[] = [];
   readonly modelSelections: Array<{
@@ -73,6 +74,7 @@ class FakeController implements SessionControllerLike {
     agentPreset: string;
   }): Promise<{ sessionId: string; agentPreset?: string }> {
     this.creates += 1;
+    this.cwds.push(params.cwd);
     return { sessionId: `session-${this.creates}`, agentPreset: params.agentPreset };
   }
 
@@ -138,7 +140,8 @@ function makeBackend(
   controller: FakeController,
   bus: EventBus,
   replyTimeoutMs = 5_000,
-  modelSelection?: ModelSelection
+  modelSelection?: ModelSelection,
+  onSessionBound?: (sessionId: string, channelId: string, workspace: string) => void
 ): LocalSessionBackend {
   return new LocalSessionBackend({
     controller,
@@ -146,6 +149,8 @@ function makeBackend(
     logger,
     statePath: join(directory, 'sessions.json'),
     agentsDir: join(directory, 'agents'),
+    workspacesDir: join(directory, 'workspaces'),
+    onSessionBound,
     replyTimeoutMs,
     modelSelection
   });
@@ -272,6 +277,30 @@ describe('LocalSessionBackend', () => {
       expect(controller.creates).toBe(0);
       expect(controller.renames).toEqual([
         { sessionId: 'session-old', title: '[Test Guild]general' }
+      ]);
+      await backend.stop();
+    });
+  });
+
+  it('creates a per-channel workspace and binds the session', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      const bindings: Array<{ sessionId: string; channelId: string; workspace: string }> = [];
+      const backend = makeBackend(directory, controller, bus, 5_000, undefined, (...args) => {
+        bindings.push({ sessionId: args[0], channelId: args[1], workspace: args[2] });
+      });
+      await backend.start();
+
+      await backend.onMessage(MESSAGE);
+
+      expect(controller.cwds).toEqual([join(directory, 'workspaces', CHANNEL)]);
+      expect(bindings).toEqual([
+        {
+          sessionId: 'session-1',
+          channelId: CHANNEL,
+          workspace: join(directory, 'workspaces', CHANNEL)
+        }
       ]);
       await backend.stop();
     });

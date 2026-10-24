@@ -11,6 +11,11 @@ export const DISCORD_BRIDGE_PROTOCOL = `## 橋接協議（最高優先）
 - 不要提到橋接、session、prompt、模型或系統訊息。
 - 不要使用 Markdown；不要 @everyone、身分組或使用者。`;
 
+const TOOL_PLUGINS = [
+  { id: 'container-tools', name: '@local/dsh-discord-bot/container-tools' },
+  { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' }
+];
+
 const COMPACTION_PLUGINS = [
   {
     id: 'compaction',
@@ -62,7 +67,7 @@ export function buildDiscordPresetPatch(
           config: {
             id: presetId,
             name: 'Discord 小鯨魚',
-            description: 'Discord 橋接用的受限聊天角色；沒有 shell、檔案或子代理工具。',
+            description: 'Discord 橋接角色；工具只在本頻道 container 內執行，沒有 host shell／檔案工具。',
             order: 20,
             plugins: [
               {
@@ -74,6 +79,7 @@ export function buildDiscordPresetPatch(
                   includeRuntimeContext: false
                 }
               },
+              ...TOOL_PLUGINS,
               ...COMPACTION_PLUGINS
             ]
           }
