@@ -117,8 +117,7 @@ Discord Gateway
    → channel 讀取開關（/deeplook）
    → @ 或回覆判斷
    → 每頻道一個 local DSH session（discord-whale）
-   → sessionController.create / agents.get / agents.resume
-   → agent.followup()
+   → sessionController.create / prompt / rename
    → ctx.on('session/event') 收集 assistant/message、turn/end
    → 回覆發回 Discord
 ```
@@ -127,7 +126,8 @@ Discord Gateway
 - access state：`~/.dsh/discord-bot/access.json`
 - session cwd：`~/.dsh/discord-bot/agents`
 - 新 session 的標題：`[GuildName]ChannelName`。
-- 重啟 DSH 後會用 mapping 的 sessionId `agents.resume()`，保留之前的對話；resume 失敗才重建。
+- 重啟 DSH 後會透過 `SessionController` 的 resume 路徑接回 mapping 的 sessionId；它會重新 compose preset，所以 `discord-whale` persona 會保留。不要直接呼叫 `agents.resume()`，那條路不會 compose persona。
+- resume 失敗時才重建 session；`commands.json` 與 `last-message.json` 可用来診斷。
 - 非 tag 訊息仍送進 DSH（`[僅記錄]`），但回覆在階段一丟棄。
 - tagged turn 若模型回 `[SILENT]`／空字串，會發 `？`，不會靜默忽略。
 

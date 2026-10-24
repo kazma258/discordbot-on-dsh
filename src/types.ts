@@ -53,29 +53,6 @@ export interface SessionControllerLike {
   modelCatalog?(): Promise<unknown>;
 }
 
-export interface AgentLike {
-  followup(input: {
-    id: string;
-    role: 'user';
-    content: readonly { type: 'text'; text: string }[];
-    source: { kind: 'user' };
-  }): void;
-}
-
-export interface AgentHandleLike {
-  readonly agent: AgentLike;
-  dispose(): Promise<void>;
-}
-
-/**
- * Host agent registry. `get` returns the live agent itself.
- * `resume` returns an owned handle; only that path has `.agent`.
- */
-export interface AgentServiceLike {
-  get(sessionId: string): AgentLike | undefined;
-  resume(options: { resumeSessionId: string }): Promise<AgentHandleLike>;
-}
-
 export interface SessionEventLike {
   readonly type: string;
   readonly data?: {

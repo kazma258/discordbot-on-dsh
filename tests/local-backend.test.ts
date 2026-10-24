@@ -138,12 +138,10 @@ function makeBackend(
   controller: FakeController,
   bus: EventBus,
   replyTimeoutMs = 5_000,
-  modelSelection?: ModelSelection,
-  agents?: ConstructorParameters<typeof LocalSessionBackend>[0]['agents']
+  modelSelection?: ModelSelection
 ): LocalSessionBackend {
   return new LocalSessionBackend({
     controller,
-    agents,
     subscribeSessionEvents: bus.subscribe,
     logger,
     statePath: join(directory, 'sessions.json'),
@@ -229,44 +227,6 @@ describe('LocalSessionBackend', () => {
     });
   });
 
-  it('prompts a live host agent directly', async () => {
-    await withTempDir(async (directory) => {
-      const bus = new EventBus();
-      const controller = new FakeController(bus);
-      const seen: string[] = [];
-      const agents = {
-        get(sessionId: string) {
-          return {
-            followup(input: { role?: string; content: readonly { text?: string }[] }) {
-              seen.push(`${input.role ?? ''}:${input.content[0]?.text ?? ''}`);
-              const turn = 1;
-              queueMicrotask(() => {
-                bus.emit(sessionId, { type: 'turn/start', data: { turn } });
-                bus.emit(sessionId, {
-                  type: 'assistant/message',
-                  data: { turn, message: { content: [{ type: 'text', text: 'from-agent' }] } }
-                });
-                bus.emit(sessionId, { type: 'turn/end', data: { turn, reason: 'completed' } });
-              });
-            }
-          };
-        },
-        async resume(): Promise<never> {
-          throw new Error('live agent must not be resumed');
-        }
-      };
-      const backend = makeBackend(directory, controller, bus, 5_000, undefined, agents);
-      await backend.start();
-
-      const reply = await backend.onMessage(MESSAGE);
-
-      expect(reply).toBe('from-agent');
-      expect(seen).toEqual([expect.stringMatching(/^user:\[需回覆\]/)]);
-      expect(controller.prompts).toHaveLength(0);
-      await backend.stop();
-    });
-  });
-
   it('titles a newly created session from guild and channel names', async () => {
     await withTempDir(async (directory) => {
       const bus = new EventBus();
@@ -301,46 +261,14 @@ describe('LocalSessionBackend', () => {
           }
         })
       );
-      const resumed: string[] = [];
-      const agents = {
-        get() {
-          return undefined;
-        },
-        async resume(options: { resumeSessionId: string }) {
-          resumed.push(options.resumeSessionId);
-          return {
-            agent: {
-              followup(input: { role?: string; content: readonly { text?: string }[] }) {
-                expect(input.role).toBe('user');
-                expect(input.content[0]?.text).toContain('[需回覆]');
-                const turn = 1;
-                queueMicrotask(() => {
-                  bus.emit('session-old', { type: 'turn/start', data: { turn } });
-                  bus.emit('session-old', {
-                    type: 'assistant/message',
-                    data: {
-                      turn,
-                      message: { content: [{ type: 'text', text: 'from-resumed' }] }
-                    }
-                  });
-                  bus.emit('session-old', {
-                    type: 'turn/end',
-                    data: { turn, reason: 'completed' }
-                  });
-                });
-              }
-            },
-            async dispose() {}
-          };
-        }
-      };
-      const backend = makeBackend(directory, controller, bus, 5_000, undefined, agents);
+      const backend = makeBackend(directory, controller, bus);
       await backend.start();
 
       const reply = await backend.onMessage(MESSAGE);
 
-      expect(reply).toBe('from-resumed');
-      expect(resumed).toEqual(['session-old']);
+      expect(reply).toBe('reply');
+      expect(controller.prompts).toHaveLength(1);
+      expect(controller.prompts[0]).toContain('[需回覆]');
       expect(controller.creates).toBe(0);
       expect(controller.renames).toEqual([
         { sessionId: 'session-old', title: '[Test Guild]general' }

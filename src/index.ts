@@ -11,11 +11,7 @@ import { DiscordBridge } from './bot.js';
 import type { DiscordPluginConfig, DiscordPluginSettings } from './config.js';
 import { SessionEventBus } from './events.js';
 import { createLogger, isLogLevel, type Logger } from './logger.js';
-import type {
-  AgentServiceLike,
-  SessionControllerLike,
-  SessionEventLike
-} from './types.js';
+import type { SessionControllerLike, SessionEventLike } from './types.js';
 
 interface PluginLogger {
   info(message: string): void;
@@ -32,7 +28,6 @@ interface SettingsContext {
 
 interface PluginContext {
   readonly sessionController: SessionControllerLike;
-  readonly agents: AgentServiceLike;
   readonly agentPresets: {
     resolve(id: string): Promise<unknown>;
   };
@@ -68,7 +63,6 @@ interface PluginContext {
 export const name = 'discord-bot';
 export const inject = [
   'sessionController',
-  'agents',
   'agentPresets',
   'credentials',
   'webServer'
@@ -277,7 +271,6 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
 
       backend = new LocalSessionBackend({
         controller: ctx.sessionController,
-        agents: ctx.agents,
         subscribeSessionEvents: bus.subscribe,
         logger,
         statePath: join(baseDir, 'sessions.json'),

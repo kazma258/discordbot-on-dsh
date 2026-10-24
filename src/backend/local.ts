@@ -8,8 +8,6 @@ import { KeyedQueue } from '../queue.js';
 import { loadSessionState, saveSessionState, type SessionRecord } from '../state.js';
 import { formatSessionTitle } from '../title.js';
 import type {
-  AgentHandleLike,
-  AgentServiceLike,
   IncomingDiscordMessage,
   MessageHandler,
   ModelSelection,
@@ -20,7 +18,6 @@ import type {
 
 export interface LocalBackendOptions {
   readonly controller: SessionControllerLike;
-  readonly agents?: AgentServiceLike;
   readonly subscribeSessionEvents: SessionEventSubscriber;
   readonly logger: Logger;
   readonly statePath: string;
@@ -76,7 +73,6 @@ function isSessionNotFound(error: unknown): boolean {
  */
 export class LocalSessionBackend implements MessageHandler {
   private readonly controller: SessionControllerLike;
-  private readonly agents?: AgentServiceLike;
   private readonly subscribeSessionEvents: SessionEventSubscriber;
   private readonly logger: Logger;
   private readonly statePath: string;
@@ -89,12 +85,10 @@ export class LocalSessionBackend implements MessageHandler {
   private readonly queue = new KeyedQueue();
   private readonly connections = new Map<string, Connection>();
   private readonly pending = new Map<string, PendingTurn>();
-  private readonly resumedHandles = new Map<string, AgentHandleLike>();
   private records = new Map<string, SessionRecord>();
 
   constructor(options: LocalBackendOptions) {
     this.controller = options.controller;
-    this.agents = options.agents;
     this.subscribeSessionEvents = options.subscribeSessionEvents;
     this.logger = options.logger;
     this.statePath = options.statePath;
@@ -147,14 +141,6 @@ export class LocalSessionBackend implements MessageHandler {
     }
     for (const connection of this.connections.values()) connection.unsubscribe();
     this.connections.clear();
-    for (const [sessionId, handle] of this.resumedHandles) {
-      this.resumedHandles.delete(sessionId);
-      try {
-        await handle.dispose();
-      } catch (error) {
-        this.logger.warn('failed to dispose resumed DSH agent', { sessionId, error });
-      }
-    }
     this.logger.info('Discord local backend stopped');
   }
 
@@ -252,19 +238,15 @@ export class LocalSessionBackend implements MessageHandler {
       { type: 'text' as const, text: formatDshPrompt(message.text, message.replyRequired) }
     ];
     try {
-      if (this.agents) {
-        await this.followup(connection.sessionId, content);
-      } else {
-        await this.controller.prompt(
-          {
-            requestId: randomUUID(),
-            sessionId: connection.sessionId,
-            mode: 'queue',
-            content
-          },
-          new AbortController().signal
-        );
-      }
+      await this.controller.prompt(
+        {
+          requestId: randomUUID(),
+          sessionId: connection.sessionId,
+          mode: 'queue',
+          content
+        },
+        new AbortController().signal
+      );
       this.writeDiagnostic('prompt-accepted', {
         channelId: message.channelId,
         messageId: message.messageId,
@@ -279,32 +261,6 @@ export class LocalSessionBackend implements MessageHandler {
       this.failPending(message.channelId, error);
     }
     return reply;
-  }
-
-  private async followup(
-    sessionId: string,
-    content: readonly { type: 'text'; text: string }[]
-  ): Promise<void> {
-    if (!this.agents) throw new Error('DSH agents service is unavailable');
-    const message = {
-      id: randomUUID(),
-      role: 'user' as const,
-      content,
-      source: { kind: 'user' as const }
-    };
-    const resumed = this.resumedHandles.get(sessionId);
-    if (resumed) {
-      resumed.agent.followup(message);
-      return;
-    }
-    const live = this.agents.get(sessionId);
-    if (live) {
-      live.followup(message);
-      return;
-    }
-    const handle = await this.agents.resume({ resumeSessionId: sessionId });
-    this.resumedHandles.set(sessionId, handle);
-    handle.agent.followup(message);
   }
 
   private async applyModelSelection(sessionId: string): Promise<void> {
@@ -407,29 +363,14 @@ export class LocalSessionBackend implements MessageHandler {
       record = undefined;
     }
 
-    // A mapping and its conversation survive DSH restarts. Resume the mapped
-    // session so the next message continues the previous conversation.
-    if (record && this.agents && !this.agents.get(record.sessionId)) {
-      try {
-        const handle = await this.agents.resume({ resumeSessionId: record.sessionId });
-        this.resumedHandles.set(record.sessionId, handle);
-        this.writeDiagnostic('session-resumed', {
-          channelId,
-          sessionId: record.sessionId
-        });
-        await this.applyTitle(record.sessionId, title, channelId);
-      } catch (error) {
-        this.logger.warn('failed to resume session; recreating', {
-          channelId,
-          sessionId: record.sessionId,
-          error
-        });
-        this.retire(channelId);
-        record = undefined;
-      }
+    // `rename` resolves and resumes a cold session through SessionController,
+    // which composes the recorded agent preset (including the persona). The
+    // later prompt then reuses that live agent.
+    if (record) {
+      await this.applyTitle(record.sessionId, title, channelId);
+    } else {
+      record = await this.createSession(channelId, title);
     }
-
-    if (!record) record = await this.createSession(channelId, title);
 
     const connection: Connection = {
       sessionId: record.sessionId,
@@ -504,16 +445,6 @@ export class LocalSessionBackend implements MessageHandler {
     if (connection) {
       connection.unsubscribe();
       this.connections.delete(channelId);
-      const handle = this.resumedHandles.get(connection.sessionId);
-      if (handle) {
-        this.resumedHandles.delete(connection.sessionId);
-        void handle.dispose().catch((error: unknown) => {
-          this.logger.warn('failed to dispose resumed DSH agent', {
-            sessionId: connection.sessionId,
-            error
-          });
-        });
-      }
     }
     this.failPending(channelId, new Error('DSH session retired'));
     if (this.records.delete(channelId)) {
