@@ -45,6 +45,8 @@ export interface SessionControllerLike {
   }): Promise<unknown>;
 
   cancel?(request: { sessionId: string }): Promise<unknown>;
+
+  modelCatalog?(): Promise<unknown>;
 }
 
 export interface AgentLike {

@@ -249,6 +249,10 @@ window.__ModuleLoader__.load({
       var busy = busyState[0];
       var setBusy = busyState[1];
 
+      var catalogState = React.useState({ status: 'loading', groups: [], failures: [] });
+      var catalog = catalogState[0];
+      var setCatalog = catalogState[1];
+
       function setNotice(kind, text) {
         setNoticeState({ kind: kind, text: text });
       }
@@ -276,6 +280,44 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         void refreshToken();
       }, [refreshToken]);
+
+      var loadCatalog = React.useCallback(async function () {
+        setCatalog({ status: 'loading', groups: [], failures: [] });
+        try {
+          var response = await fetch('/discord-bot/models', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { accept: 'application/json' }
+          });
+          var body = await response.json().catch(function () { return null; });
+          if (!response.ok || !body || body.ok !== true) {
+            throw new Error((body && (body.message || body.error)) || ('HTTP ' + response.status));
+          }
+          var groups = Array.isArray(body.catalog && body.catalog.groups)
+            ? body.catalog.groups.filter(function (group) {
+                return group && typeof group.id === 'string' && Array.isArray(group.models);
+              })
+            : [];
+          setCatalog({
+            status: 'ready',
+            groups: groups,
+            failures: Array.isArray(body.catalog && body.catalog.failures)
+              ? body.catalog.failures
+              : []
+          });
+        } catch (error) {
+          setCatalog({
+            status: 'error',
+            groups: [],
+            failures: [],
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }, []);
+
+      React.useEffect(function () {
+        void loadCatalog();
+      }, [loadCatalog]);
 
       function setField(field, value) {
         setSaved(false);
@@ -370,6 +412,28 @@ window.__ModuleLoader__.load({
           setBusy(false);
         }
       }
+
+      var providerGroups = catalog.status === 'ready' ? catalog.groups : [];
+      var selectedGroup = providerGroups.find(function (group) {
+        return group.id === draft.provider;
+      });
+      var modelOptions = selectedGroup && Array.isArray(selectedGroup.models)
+        ? selectedGroup.models
+        : [];
+      var selectedModel = modelOptions.find(function (model) {
+        return model.id === draft.model;
+      });
+      var catalogEfforts = selectedModel && selectedModel.reasoning && Array.isArray(selectedModel.reasoning.efforts)
+        ? selectedModel.reasoning.efforts
+        : [];
+      var effortChoices = catalogEfforts.length > 0
+        ? catalogEfforts
+        : [
+            { id: 'off', name: 'off' },
+            { id: 'low', name: 'low' },
+            { id: 'high', name: 'high' },
+            { id: 'max', name: 'max' }
+          ];
 
       if (snapshot.status === 'unavailable') {
         return h(
@@ -478,35 +542,104 @@ window.__ModuleLoader__.load({
             '留空則使用 DSH 的預設模型。設定會在每次回覆前套用到該頻道 session。'
           ),
           h('div', { style: gridStyle },
-            h(Field, { label: 'Provider', hint: '例如 dsh-opencode-go / deepseek-official' },
-              h('input', {
-                value: draft.provider,
-                placeholder: 'dsh-opencode-go',
-                onChange: function (event) { setField('provider', event.target.value); },
-                style: inputStyle
-              })
+            h(Field, {
+              label: 'Provider',
+              hint: catalog.status === 'ready'
+                ? '從 DSH model catalog 讀取'
+                : catalog.status === 'loading'
+                  ? '讀取模型目錄中…'
+                  : '讀取失敗，使用手動輸入'
+            },
+              catalog.status === 'ready'
+                ? h('select', {
+                    value: draft.provider,
+                    onChange: function (event) {
+                      setField('provider', event.target.value);
+                      setField('model', '');
+                      setField('reasoningEffort', '');
+                    },
+                    style: inputStyle
+                  },
+                    h('option', { value: '' }, 'DSH 預設'),
+                    draft.provider && !providerGroups.some(function (group) { return group.id === draft.provider; })
+                      ? h('option', { value: draft.provider }, draft.provider + '（目前設定）')
+                      : null,
+                    providerGroups.map(function (group) {
+                      return h('option', { key: group.id, value: group.id }, group.name || group.id);
+                    })
+                  )
+                : h('input', {
+                    value: draft.provider,
+                    placeholder: 'dsh-opencode-go',
+                    onChange: function (event) { setField('provider', event.target.value); },
+                    style: inputStyle
+                  })
             ),
-            h(Field, { label: 'Model', hint: '例如 deepseek-v4.1-flash' },
-              h('input', {
-                value: draft.model,
-                placeholder: 'deepseek-v4.1-flash',
-                onChange: function (event) { setField('model', event.target.value); },
-                style: inputStyle
-              })
+            h(Field, {
+              label: 'Model',
+              hint: draft.provider === ''
+                ? '先選 provider；留空用 DSH 預設'
+                : '從該 provider 的 catalog 讀取'
+            },
+              catalog.status === 'ready' && draft.provider !== ''
+                ? h('select', {
+                    value: draft.model,
+                    onChange: function (event) {
+                      setField('model', event.target.value);
+                      setField('reasoningEffort', '');
+                    },
+                    style: inputStyle
+                  },
+                    h('option', { value: '' }, 'Provider 預設'),
+                    draft.model && !modelOptions.some(function (model) { return model.id === draft.model; })
+                      ? h('option', { value: draft.model }, draft.model + '（目前設定）')
+                      : null,
+                    modelOptions.map(function (model) {
+                      return h('option', { key: model.id, value: model.id }, model.name || model.id);
+                    })
+                  )
+                : h('input', {
+                    value: draft.model,
+                    placeholder: draft.provider === '' ? '先選 provider' : 'deepseek-v4.1-flash',
+                    disabled: catalog.status === 'ready' && draft.provider === '',
+                    onChange: function (event) { setField('model', event.target.value); },
+                    style: inputStyle
+                  })
             ),
-            h(Field, { label: 'Reasoning Effort' },
+            h(Field, {
+              label: 'Reasoning Effort',
+              hint: catalogEfforts.length > 0 ? '由目前 model 的 catalog 提供' : '此 model 沒有 effort metadata；使用通用選項'
+            },
               h('select', {
                 value: draft.reasoningEffort,
                 onChange: function (event) { setField('reasoningEffort', event.target.value); },
                 style: inputStyle
               },
                 h('option', { value: '' }, '預設'),
-                h('option', { value: 'off' }, 'off'),
-                h('option', { value: 'low' }, 'low'),
-                h('option', { value: 'high' }, 'high'),
-                h('option', { value: 'max' }, 'max')
+                draft.reasoningEffort && !effortChoices.some(function (effort) { return effort.id === draft.reasoningEffort; })
+                  ? h('option', { value: draft.reasoningEffort }, draft.reasoningEffort + '（目前設定）')
+                  : null,
+                effortChoices.map(function (effort) {
+                  return h('option', { key: effort.id, value: effort.id }, effort.name || effort.id);
+                })
               )
             )
+          ),
+          h('div', { style: rowStyle },
+            h('p', { style: hintStyle },
+              catalog.status === 'loading'
+                ? '正在讀取 DSH 模型目錄…'
+                : catalog.status === 'error'
+                  ? '模型目錄讀取失敗：' + (catalog.message || 'unknown') + '；目前使用手動輸入。'
+                  : '模型目錄：' + providerGroups.length + ' providers' +
+                    (catalog.failures.length > 0 ? '，' + catalog.failures.length + ' 個 provider 讀取失敗' : '')
+            ),
+            h('button', {
+              type: 'button',
+              disabled: catalog.status === 'loading',
+              onClick: loadCatalog,
+              style: secondaryButtonStyle
+            }, '重新讀取模型')
           ),
           h(Field, { label: 'Agent Preset' },
             h('input', {

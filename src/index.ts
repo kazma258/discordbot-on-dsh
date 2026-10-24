@@ -39,6 +39,20 @@ interface PluginContext {
     resolve(ref: unknown): Promise<{ value?: string } | undefined>;
   };
   readonly logger: PluginLogger;
+  readonly webServer: {
+    register(options: {
+      kind: 'exact';
+      path: string;
+      handler: (
+        req: { method?: string },
+        res: {
+          statusCode: number;
+          setHeader(name: string, value: string): void;
+          end(body?: string): void;
+        }
+      ) => Promise<void> | void;
+    }): () => void;
+  };
   inject?(
     names: readonly string[],
     callback: (child: SettingsContext) => void
@@ -51,7 +65,13 @@ interface PluginContext {
 }
 
 export const name = 'discord-bot';
-export const inject = ['sessionController', 'agents', 'agentPresets', 'credentials'] as const;
+export const inject = [
+  'sessionController',
+  'agents',
+  'agentPresets',
+  'credentials',
+  'webServer'
+] as const;
 
 export const Config = z.object({
   guildIds: z.array(z.string()).default([]).volatile(),
@@ -201,6 +221,41 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
       }
     });
   }
+
+  ctx.effect(
+    () =>
+      ctx.webServer.register({
+        kind: 'exact',
+        path: '/discord-bot/models',
+        handler: async (req, res) => {
+          const send = (status: number, body: unknown): void => {
+            res.statusCode = status;
+            res.setHeader('content-type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify(body));
+          };
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            send(405, { ok: false, error: 'method-not-allowed' });
+            return;
+          }
+          if (!ctx.sessionController.modelCatalog) {
+            send(501, { ok: false, error: 'model-catalog-unavailable' });
+            return;
+          }
+          try {
+            const catalog = await ctx.sessionController.modelCatalog();
+            send(200, { ok: true, catalog });
+          } catch (error) {
+            logger.warn('failed to read the DSH model catalog', { error });
+            send(500, {
+              ok: false,
+              error: 'model-catalog-failed',
+              message: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      }),
+    'discord-bot: model catalog route'
+  );
 
   ctx.on('session/event', (session, event) => {
     bus.dispatch(session.id, event);
