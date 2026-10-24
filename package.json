@@ -70,5 +70,13 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kazma258/discordbot-on-dsh.git"
+  },
+  "homepage": "https://github.com/kazma258/discordbot-on-dsh#readme",
+  "bugs": {
+    "url": "https://github.com/kazma258/discordbot-on-dsh/issues"
   }
 }

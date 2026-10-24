@@ -44,7 +44,7 @@
 
    ```bash
    dsh plugin --profile web add \
-     "https://github.com/<OWNER>/<REPO>/releases/download/v0.5.0/local-dsh-discord-bot-0.5.0.tgz"
+     "https://github.com/kazma258/discordbot-on-dsh/releases/download/v0.5.0/local-dsh-discord-bot-0.5.0.tgz"
    ```
 
    本機檔案也可以直接安裝：
