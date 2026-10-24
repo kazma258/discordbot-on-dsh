@@ -178,6 +178,10 @@ export class ContainerManager {
     if (this.disposed) throw new Error('container manager is disposed');
     const workspace = binding.workspace || this.workspaceFor(binding.channelId);
     return this.withChannelLock(binding.channelId, async () => {
+      const current = this.channels.get(binding.channelId);
+      if (current && current.workspace !== workspace) {
+        await this.restart(binding.channelId);
+      }
       const state = await this.ensureChannel(binding.channelId, workspace);
       let result: ExecResult;
       try {

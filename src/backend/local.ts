@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { Logger } from '../logger.js';
@@ -390,14 +390,18 @@ export class LocalSessionBackend implements MessageHandler {
       record = await this.createSession(channelId, title);
     }
 
+    let workspace = record.cwd;
     if (record.cwd === this.agentsDir) {
-      this.logger.warn('session uses the legacy shared workspace; keeping history', {
+      workspace = this.workspaceFor(channelId);
+      this.migrateLegacyWorkspace(record.cwd, workspace);
+      this.logger.warn('session uses the legacy shared workspace; migrated tools to per-channel workspace', {
         channelId,
         sessionId: record.sessionId,
-        cwd: record.cwd
+        from: record.cwd,
+        to: workspace
       });
     }
-    this.onSessionBound?.(record.sessionId, channelId, record.cwd);
+    this.onSessionBound?.(record.sessionId, channelId, workspace);
 
     const connection: Connection = {
       sessionId: record.sessionId,
@@ -433,6 +437,22 @@ export class LocalSessionBackend implements MessageHandler {
     const workspace = join(this.workspacesDir, channelId);
     mkdirSync(workspace, { recursive: true, mode: 0o700 });
     return workspace;
+  }
+
+  private migrateLegacyWorkspace(source: string, destination: string): void {
+    if (source === destination || !existsSync(source)) return;
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    for (const entry of readdirSync(source)) {
+      try {
+        cpSync(join(source, entry), join(destination, entry), {
+          recursive: true,
+          force: false,
+          errorOnExist: false
+        });
+      } catch (error) {
+        this.logger.warn('failed to copy legacy workspace entry', { entry, error });
+      }
+    }
   }
 
   private async createSession(channelId: string, title: string): Promise<SessionRecord> {
