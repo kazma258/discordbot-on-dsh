@@ -167,6 +167,14 @@ export class LocalSessionBackend implements MessageHandler {
     try {
       const replyText = await this.runPrompt(message);
       const reply = cleanDshReply(replyText);
+      this.writeDiagnostic('reply-ready', {
+        channelId: message.channelId,
+        messageId: message.messageId,
+        replyRequired: message.replyRequired,
+        rawChars: replyText.length,
+        replyChars: reply?.length ?? 0,
+        silent: reply === null
+      });
       this.logger.info('DSH turn completed', {
         channelId: message.channelId,
         messageId: message.messageId,
@@ -184,6 +192,14 @@ export class LocalSessionBackend implements MessageHandler {
         try {
           const replyText = await this.runPrompt(message);
           const reply = cleanDshReply(replyText);
+          this.writeDiagnostic('reply-ready', {
+            channelId: message.channelId,
+            messageId: message.messageId,
+            replyRequired: message.replyRequired,
+            rawChars: replyText.length,
+            replyChars: reply?.length ?? 0,
+            silent: reply === null
+          });
           this.logger.info('DSH turn completed after session recreation', {
             channelId: message.channelId,
             messageId: message.messageId,

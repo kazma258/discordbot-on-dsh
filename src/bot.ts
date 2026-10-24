@@ -23,6 +23,18 @@ function displayName(user: Pick<User, 'globalName' | 'username'>): string {
   return user.globalName ?? user.username;
 }
 
+export const TAGGED_SILENT_FALLBACK = '？';
+
+/**
+ * A tag must always produce something visible. If the model chose [SILENT]
+ * (removed by cleanDshReply) or returned nothing, fall back to a minimal
+ * in-character acknowledgement instead of silently ignoring the tag.
+ */
+export function outboundReplyForTagged(reply: string | null): string {
+  const text = typeof reply === 'string' ? reply.trim() : '';
+  return text === '' ? TAGGED_SILENT_FALLBACK : text;
+}
+
 export class DiscordBridge {
   private readonly client: Client;
 
@@ -152,8 +164,10 @@ export class DiscordBridge {
     const guildId = message.guildId;
     if (!guildId) return;
 
-    const mentionedBot = this.client.user
-      ? message.mentions.users.has(this.client.user.id)
+    const botId = this.client.user?.id;
+    const mentionedBot = botId
+      ? message.mentions.users.has(botId) ||
+        new RegExp(`<@!?${botId}>`).test(message.content)
       : false;
     const repliedToBot = await this.isReplyToBot(message);
 
@@ -211,12 +225,18 @@ export class DiscordBridge {
       return;
     }
 
-    if (typeof reply !== 'string' || reply.trim() === '') return;
-
     const channel = message.channel as GuildTextBasedChannel;
     if (!channel.isTextBased()) return;
 
-    await sendReply(this.asSendable(channel), reply, { logger: this.logger });
+    if (typeof reply !== 'string' || reply.trim() === '') {
+      this.logger.warn('tagged message produced no reply; sending fallback', {
+        channelId: message.channelId,
+        messageId: message.id
+      });
+    }
+    await sendReply(this.asSendable(channel), outboundReplyForTagged(reply), {
+      logger: this.logger
+    });
   }
 
   private asSendable(channel: GuildTextBasedChannel): SendableChannel {
