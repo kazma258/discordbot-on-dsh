@@ -22,8 +22,7 @@
     "container",
     "client",
     "cordis.patch.yml",
-    "presets",
-    "README.md"
+    "presets"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0",

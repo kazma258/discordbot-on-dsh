@@ -1,0 +1,14 @@
+node_modules/
+lib/
+coverage/
+*.tsbuildinfo
+
+# Private local settings; commit only the public example.
+.env
+.env.*
+!.env.example
+*.log
+
+packs/
+.DS_Store
+Thumbs.db
