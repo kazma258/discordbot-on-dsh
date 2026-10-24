@@ -5,9 +5,6 @@ import { Config, normalizeSettings } from '../src/index.js';
 describe('normalizeSettings', () => {
   it('reads volatile Config references with .get()', () => {
     const config = Config({
-      guildIds: ['111111111111111111'],
-      channelIds: ['222222222222222222'],
-      ownerUserId: '333333333333333333',
       preset: 'discord-whale',
       provider: 'dsh-opencode-go',
       model: 'deepseek-v4.1-flash',
@@ -17,9 +14,6 @@ describe('normalizeSettings', () => {
     });
 
     expect(normalizeSettings(config)).toEqual({
-      guildIds: ['111111111111111111'],
-      channelIds: ['222222222222222222'],
-      ownerUserId: '333333333333333333',
       preset: 'discord-whale',
       provider: 'dsh-opencode-go',
       model: 'deepseek-v4.1-flash',
@@ -32,8 +26,6 @@ describe('normalizeSettings', () => {
   it('still accepts a plain config object', () => {
     expect(
       normalizeSettings({
-        guildIds: ['1'],
-        channelIds: ['2'],
         preset: '',
         provider: ' p ',
         model: ' m ',
@@ -42,8 +34,6 @@ describe('normalizeSettings', () => {
         logLevel: 'nope'
       })
     ).toMatchObject({
-      guildIds: ['1'],
-      channelIds: ['2'],
       preset: 'discord-whale',
       provider: 'p',
       model: 'm',

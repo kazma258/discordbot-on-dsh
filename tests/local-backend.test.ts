@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,7 +18,9 @@ const CHANNEL = '222222222222222222';
 
 const MESSAGE: IncomingDiscordMessage = {
   guildId: '111111111111111111',
+  guildName: 'Test Guild',
   channelId: CHANNEL,
+  channelName: 'general',
   messageId: '444444444444444444',
   authorId: '555555555555555555',
   authorName: 'Alice',
@@ -60,6 +62,7 @@ class FakeController implements SessionControllerLike {
     model: string;
     reasoningEffort?: string;
   }> = [];
+  readonly renames: Array<{ sessionId: string; title: string }> = [];
   failNextPrompt = false;
   emitReply = true;
 
@@ -105,6 +108,11 @@ class FakeController implements SessionControllerLike {
     reasoningEffort?: string;
   }): Promise<unknown> {
     this.modelSelections.push(request);
+    return {};
+  }
+
+  async rename(request: { sessionId: string; title: string }): Promise<unknown> {
+    this.renames.push(request);
     return {};
   }
 
@@ -255,6 +263,88 @@ describe('LocalSessionBackend', () => {
       expect(reply).toBe('from-agent');
       expect(seen).toEqual([expect.stringMatching(/^user:\[需回覆\]/)]);
       expect(controller.prompts).toHaveLength(0);
+      await backend.stop();
+    });
+  });
+
+  it('titles a newly created session from guild and channel names', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      const backend = makeBackend(directory, controller, bus);
+      await backend.start();
+
+      await backend.onMessage(MESSAGE);
+
+      expect(controller.renames).toEqual([
+        { sessionId: 'session-1', title: '[Test Guild]general' }
+      ]);
+      await backend.stop();
+    });
+  });
+
+  it('resumes a persisted session instead of recreating it', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      writeFileSync(
+        join(directory, 'sessions.json'),
+        JSON.stringify({
+          version: 1,
+          sessions: {
+            [CHANNEL]: {
+              sessionId: 'session-old',
+              preset: 'discord-whale',
+              cwd: join(directory, 'agents'),
+              updatedAt: Date.now()
+            }
+          }
+        })
+      );
+      const resumed: string[] = [];
+      const agents = {
+        get() {
+          return undefined;
+        },
+        async resume(options: { resumeSessionId: string }) {
+          resumed.push(options.resumeSessionId);
+          return {
+            agent: {
+              followup(input: { role?: string; content: readonly { text?: string }[] }) {
+                expect(input.role).toBe('user');
+                expect(input.content[0]?.text).toContain('[需回覆]');
+                const turn = 1;
+                queueMicrotask(() => {
+                  bus.emit('session-old', { type: 'turn/start', data: { turn } });
+                  bus.emit('session-old', {
+                    type: 'assistant/message',
+                    data: {
+                      turn,
+                      message: { content: [{ type: 'text', text: 'from-resumed' }] }
+                    }
+                  });
+                  bus.emit('session-old', {
+                    type: 'turn/end',
+                    data: { turn, reason: 'completed' }
+                  });
+                });
+              }
+            },
+            async dispose() {}
+          };
+        }
+      };
+      const backend = makeBackend(directory, controller, bus, 5_000, undefined, agents);
+      await backend.start();
+
+      const reply = await backend.onMessage(MESSAGE);
+
+      expect(reply).toBe('from-resumed');
+      expect(resumed).toEqual(['session-old']);
+      expect(controller.creates).toBe(0);
+      expect(controller.renames).toEqual([
+        { sessionId: 'session-old', title: '[Test Guild]general' }
+      ]);
       await backend.stop();
     });
   });

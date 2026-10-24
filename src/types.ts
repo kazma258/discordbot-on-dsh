@@ -1,6 +1,8 @@
 export interface IncomingDiscordMessage {
   readonly guildId: string;
+  readonly guildName: string;
   readonly channelId: string;
+  readonly channelName: string;
   readonly messageId: string;
   readonly authorId: string;
   readonly authorName: string;
@@ -43,6 +45,8 @@ export interface SessionControllerLike {
     model: string;
     reasoningEffort?: string;
   }): Promise<unknown>;
+
+  rename?(request: { sessionId: string; title: string }): Promise<unknown>;
 
   cancel?(request: { sessionId: string }): Promise<unknown>;
 

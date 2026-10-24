@@ -15,9 +15,6 @@ window.__ModuleLoader__.load({
     var TOKEN_REF = 'DISCORD_TOKEN';
 
     var EMPTY = {
-      guildIds: '',
-      channelIds: '',
-      ownerUserId: '',
       preset: 'discord-whale',
       provider: '',
       model: '',
@@ -146,9 +143,6 @@ window.__ModuleLoader__.load({
     function fromValue(value) {
       var current = value || {};
       return {
-        guildIds: Array.isArray(current.guildIds) ? current.guildIds.join('\n') : '',
-        channelIds: Array.isArray(current.channelIds) ? current.channelIds.join('\n') : '',
-        ownerUserId: typeof current.ownerUserId === 'string' ? current.ownerUserId : '',
         preset: typeof current.preset === 'string' && current.preset ? current.preset : 'discord-whale',
         provider: typeof current.provider === 'string' ? current.provider : '',
         model: typeof current.model === 'string' ? current.model : '',
@@ -346,9 +340,6 @@ window.__ModuleLoader__.load({
           }
 
           var values = [
-            ['guildIds', splitIds(draft.guildIds)],
-            ['channelIds', splitIds(draft.channelIds)],
-            ['ownerUserId', draft.ownerUserId.trim()],
             ['preset', draft.preset.trim() || 'discord-whale'],
             ['provider', draft.provider.trim()],
             ['model', draft.model.trim()],
@@ -363,14 +354,8 @@ window.__ModuleLoader__.load({
             if (!accepted) throw new Error('Host 拒絕寫入 ' + field);
           }
 
-          var listsEmpty = splitIds(draft.guildIds).length === 0 || splitIds(draft.channelIds).length === 0;
           setSaved(true);
-          setNotice(
-            'success',
-            listsEmpty
-              ? '設定已儲存，但 guildIds / channelIds 空值時 bot 不會連線。'
-              : '設定已儲存到 DSH profile。重啟 DSH 後由 host plugin 套用。'
-          );
+          setNotice('success', '設定已儲存到 DSH profile。重啟 DSH 後由 host plugin 套用。');
         } catch (error) {
           setNotice('error', '儲存失敗：' + (error instanceof Error ? error.message : String(error)));
         } finally {
@@ -509,33 +494,8 @@ window.__ModuleLoader__.load({
           h('p', { style: hintStyle },
             'Token 由 DSH credentials 管理，不會寫入 cordis.patch.yml。儲存後需重啟 DSH 才會重新連線。'
           ),
-          h('div', { style: gridStyle },
-            h(Field, { label: 'Guild IDs', hint: '每行一個，或逗號分隔。' },
-              h('textarea', {
-                value: draft.guildIds,
-                rows: 3,
-                placeholder: '111111111111111111',
-                onChange: function (event) { setField('guildIds', event.target.value); },
-                style: inputStyle
-              })
-            ),
-            h(Field, { label: 'Channel IDs', hint: '只回覆這些頻道。' },
-              h('textarea', {
-                value: draft.channelIds,
-                rows: 3,
-                placeholder: '222222222222222222',
-                onChange: function (event) { setField('channelIds', event.target.value); },
-                style: inputStyle
-              })
-            )
-          ),
-          h(Field, { label: 'Owner User ID', hint: '保留給 owner-only 功能；可留空。' },
-            h('input', {
-              value: draft.ownerUserId,
-              placeholder: '333333333333333333',
-              onChange: function (event) { setField('ownerUserId', event.target.value); },
-              style: inputStyle
-            })
+          h('p', { style: hintStyle },
+            '讀取預設關閉。具管理員權限的使用者在頻道輸入 /deeplook 開啟；/deeplook mode:off 關閉。Discord 身份組權限決定 bot 能看到哪些頻道。'
           )
         ),
         h('section', { style: cardStyle },

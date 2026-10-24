@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import z from '@deepseek-ai/schemastery';
 
+import { ChannelAccessStore } from './access.js';
 import { LocalSessionBackend } from './backend/local.js';
 import { DiscordBridge } from './bot.js';
 import type { DiscordPluginConfig, DiscordPluginSettings } from './config.js';
@@ -74,6 +75,8 @@ export const inject = [
 ] as const;
 
 export const Config = z.object({
+  // Deprecated: read access is controlled by Discord permissions plus the
+  // per-channel /deeplook toggle. Kept only so older profile patches still parse.
   guildIds: z.array(z.string()).default([]).volatile(),
   channelIds: z.array(z.string()).default([]).volatile(),
   ownerUserId: z.string().default('').volatile(),
@@ -87,14 +90,6 @@ export const Config = z.object({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter((item) => item !== '');
 }
 
 /**
@@ -136,15 +131,11 @@ export function normalizeSettings(input: unknown): DiscordPluginSettings {
     rawReplyTimeoutMs <= 600_000
       ? rawReplyTimeoutMs
       : 120_000;
-  const rawOwner = readVolatile<unknown>(raw.ownerUserId, '');
   const rawProvider = readVolatile<unknown>(raw.provider, '');
   const rawModel = readVolatile<unknown>(raw.model, '');
   const rawEffort = readVolatile<unknown>(raw.reasoningEffort, '');
 
   return {
-    guildIds: stringArray(readVolatile<unknown>(raw.guildIds, [])),
-    channelIds: stringArray(readVolatile<unknown>(raw.channelIds, [])),
-    ownerUserId: typeof rawOwner === 'string' ? rawOwner.trim() : '',
     preset,
     provider: typeof rawProvider === 'string' ? rawProvider.trim() : '',
     model: typeof rawModel === 'string' ? rawModel.trim() : '',
@@ -195,8 +186,6 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
             pid: process.pid,
             phase,
             preset: settings.preset,
-            guilds: settings.guildIds.length,
-            channels: settings.channelIds.length,
             ...extra
           },
           null,
@@ -275,12 +264,6 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         logger.error('Discord plugin not started: DISCORD_TOKEN is not configured');
         return;
       }
-      if (settings.guildIds.length === 0 || settings.channelIds.length === 0) {
-        writeStatus('no-allowlist', { tokenConfigured: true });
-        logger.error('Discord plugin not started: guildIds and channelIds must not be empty');
-        return;
-      }
-
       const modelSelection =
         settings.provider !== '' && settings.model !== ''
           ? {
@@ -311,7 +294,12 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         }
       });
       await backend.start();
-      writeStatus('backend-started', { tokenConfigured: true });
+      const access = new ChannelAccessStore(join(baseDir, 'access.json'), logger);
+      access.load();
+      writeStatus('backend-started', {
+        tokenConfigured: true,
+        enabledChannels: [...access.enabledChannels()].length
+      });
       if (disposed) {
         await backend.stop();
         backend = undefined;
@@ -320,20 +308,19 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
 
       const config: DiscordPluginConfig = {
         discordToken: token,
-        allowedGuildIds: new Set(settings.guildIds),
-        allowedChannelIds: new Set(settings.channelIds),
-        ownerUserId: settings.ownerUserId,
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
         modelSelection
       };
-      bridge = new DiscordBridge(config, backend, logger);
+      bridge = new DiscordBridge(config, backend, access, logger);
       await bridge.start();
-      writeStatus('started', { tokenConfigured: true });
+      writeStatus('started', {
+        tokenConfigured: true,
+        enabledChannels: [...access.enabledChannels()].length
+      });
       logger.info('Discord plugin started', {
-        guilds: settings.guildIds.length,
-        channels: settings.channelIds.length,
-        preset: settings.preset
+        preset: settings.preset,
+        enabledChannels: [...access.enabledChannels()].length
       });
     })().catch((error: unknown) => {
       writeStatus('error', {

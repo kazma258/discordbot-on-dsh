@@ -1,12 +1,8 @@
-# Defaults are intentionally empty: fill them from Settings -> Discord Bot.
-# The plugin refuses to connect Discord until guildIds and channelIds exist.
+# Reading is disabled per channel until an administrator runs /deeplook.
 - insert:
     - id: discord-bot
       name: '@local/dsh-discord-bot'
       config:
-        guildIds: []
-        channelIds: []
-        ownerUserId: ''
         preset: discord-whale
         provider: ''
         model: ''

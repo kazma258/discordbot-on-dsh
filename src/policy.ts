@@ -1,15 +1,12 @@
-export interface WhitelistConfig {
-  readonly allowedGuildIds: ReadonlySet<string>;
-  readonly allowedChannelIds: ReadonlySet<string>;
-}
-
 export interface MessageScope {
-  /** null for direct messages, which stage 1 ignores. */
+  /** null for direct messages, which this stage ignores. */
   readonly guildId: string | null;
   readonly channelId: string;
   readonly authorIsBot: boolean;
   readonly mentionedBot: boolean;
   readonly repliedToBot: boolean;
+  /** Per-channel read toggle controlled by the administrator slash command. */
+  readonly accessEnabled: boolean;
 }
 
 export type MessageAction = 'ignore' | 'process';
@@ -19,32 +16,19 @@ export interface MessageDecision {
   readonly replyRequired: boolean;
 }
 
-export function isAllowedGuild(guildId: string | null, config: WhitelistConfig): boolean {
-  return guildId !== null && config.allowedGuildIds.has(guildId);
-}
-
-export function isAllowedChannel(channelId: string, config: WhitelistConfig): boolean {
-  return config.allowedChannelIds.has(channelId);
-}
-
 /**
- * Decide whether a message belongs to the bridge at all, and whether it must
- * produce a Discord reply. Under plan A every whitelisted human message is
- * forwarded to DSH; only an @mention or a reply to the bot forces a reply.
+ * Discord role permissions decide which channels the bot can see; the bridge
+ * adds an explicit per-channel read toggle on top. A disabled channel is
+ * ignored entirely. Enabled channels forward every human message to DSH;
+ * only an @mention or a reply to the bot forces a Discord reply.
  */
-export function classifyMessage(scope: MessageScope, config: WhitelistConfig): MessageDecision {
+export function classifyMessage(scope: MessageScope): MessageDecision {
   if (scope.authorIsBot) return { action: 'ignore', replyRequired: false };
   if (scope.guildId === null) return { action: 'ignore', replyRequired: false };
-  if (!isAllowedGuild(scope.guildId, config)) return { action: 'ignore', replyRequired: false };
-  if (!isAllowedChannel(scope.channelId, config)) return { action: 'ignore', replyRequired: false };
+  if (!scope.accessEnabled) return { action: 'ignore', replyRequired: false };
 
   return {
     action: 'process',
     replyRequired: scope.mentionedBot || scope.repliedToBot
   };
-}
-
-/** Any guild outside the allowlist must be left as soon as it is seen. */
-export function shouldLeaveGuild(guildId: string, config: WhitelistConfig): boolean {
-  return !config.allowedGuildIds.has(guildId);
 }

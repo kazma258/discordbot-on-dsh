@@ -24,10 +24,10 @@ tarball 內已含 `lib/`、`client/`、`cordis.patch.yml`、`presets/`，所以�
 ```bash
 # 在 repo 根目錄
 npm run pack:discord-bot
-# 產物：packs/local-dsh-discord-bot-0.3.1.tgz
+# 產物：packs/local-dsh-discord-bot-0.4.0.tgz
 
 # 複製 tarball 到目標 DSH 後：
-dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.3.1.tgz
+dsh plugin --profile web add /absolute/path/to/packs/local-dsh-discord-bot-0.4.0.tgz
 ```
 
 安裝後 DSH profile 會多出：
@@ -59,9 +59,6 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 | 欄位 | 說明 |
 |---|---|
 | Bot Token | 存進 DSH credentials 的 `DISCORD_TOKEN`，不會寫入 profile |
-| Guild IDs | 每行一個或逗號分隔；空值 fail closed |
-| Channel IDs | 允許回覆的頻道 |
-| Owner User ID | 保留給 owner-only 功能，可留空 |
 | Provider | 從 DSH model catalog 讀取的下拉選單（`deepseek-official`、`dsh-opencode-go` 等） |
 | Model | 依 provider 顯示可用 model 的下拉選單 |
 | Reasoning Effort | 依目前 model 的 catalog metadata 顯示可選 effort |
@@ -69,6 +66,7 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 | Reply Timeout | 5000–600000 ms |
 | Log Level | debug／info／warn／error |
 
+- 不再設定 Guild ID／Channel ID／Owner ID；bot 能看到哪些頻道由 Discord 身份組權限決定。
 - 非秘密設定透過 DSH settings 寫回 profile patch；卡片是主要設定方式。
 - `DISCORD_TOKEN` 只存 credentials；若 credentials 沒有值，host 仍會 fallback 到 process env。
 - 卡片透過 host 的 `GET /discord-bot/models` 讀 `sessionController.modelCatalog()`；provider/model/effort 選單直接使用系統現有 catalog。
@@ -77,13 +75,32 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 - Token 或設定變更後若 DSH 沒有自動 reload plugin，重啟 DSH 讓 Discord 重新連線。
 - 不要把 token 放進 `cordis.patch.yml` 或版本庫。
 
+## 讀取權限（per-channel）
+
+每個頻道預設**不讀取**。具管理員權限（Discord `Administrator`）的使用者在該頻道執行：
+
+```text
+/deeplook
+```
+
+便開啟該頻道的讀取；省略 `mode` 時預設是 `on`。關閉：
+
+```text
+/deeplook mode:off
+```
+
+`/大肥魚` 是同功能的別名。Discord slash command 不支援真正的 trailing text，所以 `off` 是 `mode` option；bare `/deeplook` 仍可直接開啟。
+
+- 權限狀態存在 `~/.dsh/discord-bot/access.json`，重啟後保留。
+- 只有執行指令的那個 channel 會切換；其他 channel 不受影響。
+- Discord 身份組／頻道權限仍然決定 bot 是否看得到該頻道。
+- 指令會以 ephemeral 訊息回覆成功或權限錯誤。
+
 進階／fallback 才需要手動覆寫：
 
 ```yaml
 - id: discord-bot
   config:
-    guildIds: ['111111111111111111']
-    channelIds: ['222222222222222222']
     provider: dsh-opencode-go
     model: deepseek-v4.1-flash
     reasoningEffort: low
@@ -93,17 +110,22 @@ dsh plugin --profile web add link:/absolute/path/to/plugins/discord-bot
 
 ```text
 Discord Gateway
-   → 白名單／@ 或回覆判斷
+   → channel 讀取開關（/deeplook）
+   → @ 或回覆判斷
    → 每頻道一個 local DSH session（discord-whale）
-   → sessionController.prompt()
+   → sessionController.create / agents.get / agents.resume
+   → agent.followup()
    → ctx.on('session/event') 收集 assistant/message、turn/end
    → 回覆發回 Discord
 ```
 
 - session mapping：`~/.dsh/discord-bot/sessions.json`
+- access state：`~/.dsh/discord-bot/access.json`
 - session cwd：`~/.dsh/discord-bot/agents`
+- 新 session 的標題：`[GuildName]ChannelName`。
+- 重啟 DSH 後會用 mapping 的 sessionId `agents.resume()`，保留之前的對話；resume 失敗才重建。
 - 非 tag 訊息仍送進 DSH（`[僅記錄]`），但回覆在階段一丟棄。
-- `DSH session not-found` 會重建一次；逾時會 `sessionController.cancel`。
+- tagged turn 若模型回 `[SILENT]`／空字串，會發 `？`，不會靜默忽略。
 
 ## 測試
 
@@ -112,12 +134,18 @@ npm run typecheck --workspace @local/dsh-discord-bot
 npm test --workspace @local/dsh-discord-bot
 ```
 
-涵蓋：訊息正規化、白名單／觸發、2000 字拆分、allowedMentions、local session backend（建立、佇列、timeout、not-found 重建、model selection）。
+涵蓋：訊息正規化、channel access toggle、slash command 參數、標題格式、session resume、2000 字拆分、allowedMentions、model selection。
 
-## 尚未 live 驗證
+## Live 狀態
 
-- `ctx.sessionController` 從 Host plugin row 直接建立 preset session
-- `ctx.on('session/event')` 的 turn 配對
-- `ctx.configForms` 卡片與 volatile Config 的即時寫入
-- DSH credentials 的 `DISCORD_TOKEN`
-- `dsh plugin add` 後的 profile 載入與重啟
+已驗證：
+
+- Discord tag 回覆
+- Settings 卡片寫入
+- `GET /discord-bot/models` model catalog
+
+待 live 驗證（需重啟後測）：
+
+- `/deeplook`、`/大肥魚` 的 guild command 註冊與權限檢查
+- `[GuildName]ChannelName` 標題
+- 重啟後 `agents.resume()` 是否保留舊對話

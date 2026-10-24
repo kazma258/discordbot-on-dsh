@@ -4,10 +4,18 @@ import {
   GatewayIntentBits,
   type Guild,
   type GuildTextBasedChannel,
+  type Interaction,
   type Message,
   type User
 } from 'discord.js';
 
+import type { ChannelAccessStore } from './access.js';
+import {
+  ACCESS_COMMAND_NAMES,
+  buildAccessCommand,
+  isAdministrator,
+  resolveAccessMode
+} from './commands.js';
 import type { DiscordPluginConfig } from './config.js';
 import type { Logger } from './logger.js';
 import {
@@ -15,7 +23,7 @@ import {
   type MessageMedia,
   type ReplyTarget
 } from './normalize.js';
-import { classifyMessage, shouldLeaveGuild } from './policy.js';
+import { classifyMessage } from './policy.js';
 import { sendReply, type SendableChannel } from './sender.js';
 import type { IncomingDiscordMessage, MessageHandler } from './types.js';
 
@@ -41,6 +49,7 @@ export class DiscordBridge {
   constructor(
     private readonly config: DiscordPluginConfig,
     private readonly handler: MessageHandler,
+    private readonly access: ChannelAccessStore,
     private readonly logger: Logger
   ) {
     this.client = new Client({
@@ -62,9 +71,13 @@ export class DiscordBridge {
     });
 
     this.client.on(Events.GuildCreate, (guild) => {
-      if (shouldLeaveGuild(guild.id, this.config)) {
-        void this.leaveGuild(guild);
-      }
+      void this.registerCommands(guild);
+    });
+
+    this.client.on(Events.InteractionCreate, (interaction) => {
+      void this.handleInteraction(interaction).catch((error) => {
+        this.logger.error('interaction handling failed', { error });
+      });
     });
 
     this.client.on(Events.Error, (error) => {
@@ -73,7 +86,7 @@ export class DiscordBridge {
 
     this.client.once(Events.ClientReady, (client) => {
       this.logger.info('Discord connected', { user: client.user.tag });
-      void this.leaveUnknownGuilds();
+      void this.registerCommandsForAllGuilds();
     });
   }
 
@@ -85,21 +98,68 @@ export class DiscordBridge {
     await this.client.destroy();
   }
 
-  private async leaveUnknownGuilds(): Promise<void> {
+  private async registerCommandsForAllGuilds(): Promise<void> {
     for (const guild of this.client.guilds.cache.values()) {
-      if (shouldLeaveGuild(guild.id, this.config)) {
-        await this.leaveGuild(guild);
-      }
+      await this.registerCommands(guild);
     }
   }
 
-  private async leaveGuild(guild: Guild): Promise<void> {
+  private async registerCommands(guild: Guild): Promise<void> {
     try {
-      await guild.leave();
-      this.logger.warn('left unknown guild', { guildId: guild.id });
+      const existing = await guild.commands.fetch();
+      for (const name of ACCESS_COMMAND_NAMES) {
+        if (existing.some((command) => command.name === name)) continue;
+        try {
+          await guild.commands.create(buildAccessCommand(name));
+          this.logger.info('registered Discord access command', {
+            guildId: guild.id,
+            name
+          });
+        } catch (error) {
+          this.logger.warn('failed to register Discord access command', {
+            guildId: guild.id,
+            name,
+            error
+          });
+        }
+      }
     } catch (error) {
-      this.logger.error('failed to leave unknown guild', { guildId: guild.id, error });
+      this.logger.warn('failed to inspect guild commands', {
+        guildId: guild.id,
+        error
+      });
     }
+  }
+
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    if (!interaction.isChatInputCommand()) return;
+    if (!(ACCESS_COMMAND_NAMES as readonly string[]).includes(interaction.commandName)) {
+      return;
+    }
+    if (!interaction.inGuild() || !interaction.channelId) {
+      await interaction.reply({ content: '這個指令只能在伺服器頻道使用。', ephemeral: true });
+      return;
+    }
+    if (!isAdministrator(interaction.memberPermissions)) {
+      await interaction.reply({ content: '只有管理員可以切換讀取權限。', ephemeral: true });
+      return;
+    }
+    const mode = resolveAccessMode(interaction.options.getString('mode'));
+    if (mode === null) {
+      await interaction.reply({ content: 'mode 只能是 on 或 off。', ephemeral: true });
+      return;
+    }
+    this.access.setEnabled(interaction.channelId, mode === 'on');
+    await interaction.reply({
+      content: mode === 'on' ? '已開啟此頻道的讀取。' : '已關閉此頻道的讀取。',
+      ephemeral: true
+    });
+    this.logger.info('channel access changed', {
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      mode,
+      userId: interaction.user.id
+    });
   }
 
   private async isReplyToBot(message: Message): Promise<boolean> {
@@ -164,23 +224,28 @@ export class DiscordBridge {
     const guildId = message.guildId;
     if (!guildId) return;
 
+    if (!this.access.isEnabled(message.channelId)) return;
+
     const botId = this.client.user?.id;
     const mentionedBot = botId
       ? message.mentions.users.has(botId) ||
         new RegExp(`<@!?${botId}>`).test(message.content)
       : false;
     const repliedToBot = await this.isReplyToBot(message);
+    const guildName = message.guild?.name ?? guildId;
+    const channelName =
+      'name' in message.channel && typeof message.channel.name === 'string'
+        ? message.channel.name
+        : message.channelId;
 
-    const decision = classifyMessage(
-      {
-        guildId,
-        channelId: message.channelId,
-        authorIsBot: message.author.bot,
-        mentionedBot,
-        repliedToBot
-      },
-      this.config
-    );
+    const decision = classifyMessage({
+      guildId,
+      channelId: message.channelId,
+      authorIsBot: message.author.bot,
+      mentionedBot,
+      repliedToBot,
+      accessEnabled: true
+    });
 
     if (decision.action === 'ignore') return;
 
@@ -204,7 +269,9 @@ export class DiscordBridge {
 
     const incoming: IncomingDiscordMessage = {
       guildId,
+      guildName,
       channelId: message.channelId,
+      channelName,
       messageId: message.id,
       authorId: message.author.id,
       authorName,

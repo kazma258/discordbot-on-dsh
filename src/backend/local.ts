@@ -6,6 +6,7 @@ import type { Logger } from '../logger.js';
 import { cleanDshReply, formatDshPrompt } from '../prompt.js';
 import { KeyedQueue } from '../queue.js';
 import { loadSessionState, saveSessionState, type SessionRecord } from '../state.js';
+import { formatSessionTitle } from '../title.js';
 import type {
   AgentHandleLike,
   AgentServiceLike,
@@ -239,7 +240,7 @@ export class LocalSessionBackend implements MessageHandler {
   }
 
   private async runPrompt(message: IncomingDiscordMessage): Promise<string> {
-    const connection = await this.ensureConnection(message.channelId);
+    const connection = await this.ensureConnection(message);
     await this.applyModelSelection(connection.sessionId);
     this.writeDiagnostic('prompting', {
       channelId: message.channelId,
@@ -291,6 +292,11 @@ export class LocalSessionBackend implements MessageHandler {
       content,
       source: { kind: 'user' as const }
     };
+    const resumed = this.resumedHandles.get(sessionId);
+    if (resumed) {
+      resumed.agent.followup(message);
+      return;
+    }
     const live = this.agents.get(sessionId);
     if (live) {
       live.followup(message);
@@ -379,10 +385,17 @@ export class LocalSessionBackend implements MessageHandler {
     }
   }
 
-  private async ensureConnection(channelId: string): Promise<Connection> {
+  private async ensureConnection(message: IncomingDiscordMessage): Promise<Connection> {
+    const channelId = message.channelId;
     const existing = this.connections.get(channelId);
     if (existing) return existing;
 
+    const title = formatSessionTitle(
+      message.guildName,
+      message.channelName,
+      message.guildId,
+      channelId
+    );
     let record = this.records.get(channelId);
     if (record && record.preset !== this.presetId) {
       this.logger.warn('session preset changed; recreating', {
@@ -394,19 +407,29 @@ export class LocalSessionBackend implements MessageHandler {
       record = undefined;
     }
 
-    // A mapping survives DSH restarts, but its agent does not. Resuming an
-    // old session through the Host facade is unreliable here, so create a
-    // fresh session instead of failing the first message after every restart.
+    // A mapping and its conversation survive DSH restarts. Resume the mapped
+    // session so the next message continues the previous conversation.
     if (record && this.agents && !this.agents.get(record.sessionId)) {
-      this.writeDiagnostic('stale-session', {
-        channelId,
-        sessionId: record.sessionId
-      });
-      this.retire(channelId);
-      record = undefined;
+      try {
+        const handle = await this.agents.resume({ resumeSessionId: record.sessionId });
+        this.resumedHandles.set(record.sessionId, handle);
+        this.writeDiagnostic('session-resumed', {
+          channelId,
+          sessionId: record.sessionId
+        });
+        await this.applyTitle(record.sessionId, title, channelId);
+      } catch (error) {
+        this.logger.warn('failed to resume session; recreating', {
+          channelId,
+          sessionId: record.sessionId,
+          error
+        });
+        this.retire(channelId);
+        record = undefined;
+      }
     }
 
-    if (!record) record = await this.createSession(channelId);
+    if (!record) record = await this.createSession(channelId, title);
 
     const connection: Connection = {
       sessionId: record.sessionId,
@@ -418,7 +441,26 @@ export class LocalSessionBackend implements MessageHandler {
     return connection;
   }
 
-  private async createSession(channelId: string): Promise<SessionRecord> {
+  private async applyTitle(
+    sessionId: string,
+    title: string,
+    channelId: string
+  ): Promise<void> {
+    if (!this.controller.rename) return;
+    try {
+      await this.controller.rename({ sessionId, title });
+      this.writeDiagnostic('session-titled', { channelId, sessionId, title });
+    } catch (error) {
+      this.logger.warn('failed to set DSH session title', {
+        channelId,
+        sessionId,
+        title,
+        error
+      });
+    }
+  }
+
+  private async createSession(channelId: string, title: string): Promise<SessionRecord> {
     if (this.ensurePreset) await this.ensurePreset();
     const value = await this.controller.create({
       cwd: this.agentsDir,
@@ -430,6 +472,8 @@ export class LocalSessionBackend implements MessageHandler {
         `DSH created a session without the restricted preset (wanted "${this.presetId}", got "${value.agentPreset ?? 'default'}")`
       );
     }
+
+    await this.applyTitle(value.sessionId, title, channelId);
 
     const record: SessionRecord = {
       sessionId: value.sessionId,
