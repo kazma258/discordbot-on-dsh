@@ -195,7 +195,8 @@ export class LocalSessionBackend implements MessageHandler {
           this.writeDiagnostic('process-error', {
             channelId: message.channelId,
             messageId: message.messageId,
-            error: errorText(retryError)
+            error: errorText(retryError),
+            stack: retryError instanceof Error ? retryError.stack : undefined
           });
           this.logger.error('DSH turn failed after session recreation', {
             channelId: message.channelId,
@@ -209,7 +210,8 @@ export class LocalSessionBackend implements MessageHandler {
       this.writeDiagnostic('process-error', {
         channelId: message.channelId,
         messageId: message.messageId,
-        error: errorText(error)
+        error: errorText(error),
+        stack: error instanceof Error ? error.stack : undefined
       });
       this.logger.error('DSH turn failed', {
         channelId: message.channelId,
@@ -363,6 +365,18 @@ export class LocalSessionBackend implements MessageHandler {
         channelId,
         oldPreset: record.preset,
         newPreset: this.presetId
+      });
+      this.retire(channelId);
+      record = undefined;
+    }
+
+    // A mapping survives DSH restarts, but its agent does not. Resuming an
+    // old session through the Host facade is unreliable here, so create a
+    // fresh session instead of failing the first message after every restart.
+    if (record && this.agents && !this.agents.get(record.sessionId)) {
+      this.writeDiagnostic('stale-session', {
+        channelId,
+        sessionId: record.sessionId
       });
       this.retire(channelId);
       record = undefined;
