@@ -28,8 +28,9 @@ import {
 } from './normalize.js';
 import { classifyMessage } from './policy.js';
 import { sendReply, type SendableChannel } from './sender.js';
+import { APPLICATION_EMOJI_NOTES } from './emoji-catalog.js';
 import {
-  applicationEmojiPromptNames,
+  applicationEmojiPrompt,
   buildApplicationEmojiMap,
   renderApplicationEmojis,
   type ApplicationEmojiInfo
@@ -99,7 +100,7 @@ export class DiscordBridge {
   private readonly lastSpokenAt = new Map<string, number>();
   private readonly deliveryStatus = new Map<string, DeliveryStatus>();
   private applicationEmojis = new Map<string, ApplicationEmojiInfo>();
-  private applicationEmojiNames: string[] = [];
+  private applicationEmojiPromptText?: string;
   private readonly commandStatus: Record<
     string,
     { at: string; commands: Record<string, { status: string; error?: string }> }
@@ -159,11 +160,11 @@ export class DiscordBridge {
       const application = this.client.application;
       if (!application) return;
       const fetched = await application.emojis.fetch();
-      this.applicationEmojis = buildApplicationEmojiMap(fetched.values());
-      this.applicationEmojiNames = applicationEmojiPromptNames(this.applicationEmojis);
+      this.applicationEmojis = buildApplicationEmojiMap(fetched.values(), APPLICATION_EMOJI_NOTES);
+      this.applicationEmojiPromptText = applicationEmojiPrompt(this.applicationEmojis);
       this.logger.info('loaded application emojis', {
         count: this.applicationEmojis.size,
-        promptCount: this.applicationEmojiNames.length
+        described: [...this.applicationEmojis.values()].filter((emoji) => emoji.localNote).length
       });
     } catch (error) {
       this.logger.warn('failed to load application emojis', { error });
@@ -401,8 +402,8 @@ export class DiscordBridge {
       replyRequired: decision.replyRequired,
       cooldownActive: coolingDown,
       ...(deliveryNote ? { deliveryNote } : {}),
-      ...(this.applicationEmojiNames.length > 0
-        ? { emojiNames: this.applicationEmojiNames }
+      ...(this.applicationEmojiPromptText
+        ? { emojiPrompt: this.applicationEmojiPromptText }
         : {})
     };
 

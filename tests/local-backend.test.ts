@@ -294,7 +294,7 @@ describe('LocalSessionBackend', () => {
         replyRequired: false,
         cooldownActive: true,
         deliveryNote: '[發送狀態] 上一則回覆沒有送到 Discord（發言冷卻）。',
-        emojiNames: ['wave']
+        emojiPrompt: '[可用應用表情]\n- :wave: 揮手'
       });
 
       expect(controller.prompts[0]).toContain('[冷卻]');

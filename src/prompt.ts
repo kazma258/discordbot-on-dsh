@@ -5,7 +5,7 @@ export function formatDshPrompt(
   replyRequired: boolean,
   cooldownActive = false,
   deliveryNote?: string,
-  emojiNames?: readonly string[]
+  emojiPrompt?: string
 ): string {
   const marker = replyRequired
     ? '[需回覆]'
@@ -13,10 +13,7 @@ export function formatDshPrompt(
       ? '[冷卻]'
       : '[可回覆]';
   const note = deliveryNote === undefined ? '' : `\n${deliveryNote}`;
-  const emojiNote =
-    emojiNames !== undefined && emojiNames.length > 0
-      ? `\n[可用應用表情] ${emojiNames.map((name) => `:${name}:`).join(' ')}`
-      : '';
+  const emojiNote = emojiPrompt ? `\n${emojiPrompt}` : '';
   return `${marker} ${normalizedMessage}${note}${emojiNote}`;
 }
 

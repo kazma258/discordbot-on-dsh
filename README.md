@@ -144,10 +144,11 @@ Bot 啟動後會讀取 application-owned emoji：
 await client.application.emojis.fetch()
 ```
 
-模型看到的 prompt 會附上最多 80 個名稱：
+模型看到的 prompt 會附上名稱、`localNote` 與 `usage`。最多 80 個名稱，總長上限 8000 字元：
 
 ```text
-[可用應用表情] :wave: :party:
+[可用應用表情]
+- :smug:：鯨魚娘的大臉近景…… 用法：適合小小得意……
 ```
 
 模型用 `:name:` 輸出。bridge 查目錄後轉成：
@@ -160,6 +161,7 @@ await client.application.emojis.fetch()
 - application emoji 只屬於這個 application。
 - application emoji 不需要 `USE_EXTERNAL_EMOJIS`。
 - 未列出的名稱不會被替換。
+- `localNote` 與 `usage` 來自 `src/emoji-catalog.ts`。
 - 模型不得自行產生 emoji ID。
 - 上傳新 emoji 後，重啟 DSH 或重新連線 bot，讓目錄重新抓取。
 - prompt 只列前 80 個名稱。bridge 仍保留完整 ID 目錄。

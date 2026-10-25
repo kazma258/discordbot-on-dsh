@@ -14,7 +14,7 @@ export interface IncomingDiscordMessage {
   /** Delivery result of the previous bot reply, for the next model turn. */
   readonly deliveryNote?: string;
   /** Application emoji names the model may reference as :name:. */
-  readonly emojiNames?: readonly string[];
+  readonly emojiPrompt?: string;
 }
 
 export interface MessageHandler {

@@ -258,7 +258,7 @@ export class LocalSessionBackend implements MessageHandler {
         message.replyRequired,
         message.cooldownActive === true,
         message.deliveryNote,
-        message.emojiNames
+        message.emojiPrompt
       ) }
     ];
     try {

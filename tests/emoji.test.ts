@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { APPLICATION_EMOJI_NOTES } from '../src/emoji-catalog.js';
 import {
+  applicationEmojiPrompt,
   applicationEmojiPromptNames,
   buildApplicationEmojiMap,
   MAX_PROMPT_EMOJIS,
@@ -23,6 +25,21 @@ describe('application emojis', () => {
     expect(renderApplicationEmojis(':unknown: :: :wave', catalog)).toBe(
       ':unknown: :: :wave'
     );
+  });
+
+  it('merges local notes by emoji id and includes usage in the prompt', () => {
+    const catalog = buildApplicationEmojiMap(
+      [
+        { id: '1563794176162660412', name: 'smug', animated: false },
+        { id: '999', name: 'unannotated', animated: false }
+      ],
+      APPLICATION_EMOJI_NOTES
+    );
+    const prompt = applicationEmojiPrompt(catalog);
+    expect(prompt).toContain(':smug:');
+    expect(prompt).toContain('知道些什麼');
+    expect(prompt).toContain('用法：');
+    expect(prompt).toContain(':unannotated:');
   });
 
   it('sorts and caps the prompt list', () => {
