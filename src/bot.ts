@@ -37,6 +37,22 @@ function displayName(user: Pick<User, 'globalName' | 'username'>): string {
 export const TAGGED_SILENT_FALLBACK = '？';
 
 /**
+ * The speech cooldown only suppresses optional replies. Required replies
+ * (mentions and replies to the bot) always bypass the cooldown.
+ */
+export function isOptionalReplyCoolingDown(
+  lastSpokenAt: number | undefined,
+  now: number,
+  cooldownMs: number
+): boolean {
+  return (
+    cooldownMs > 0 &&
+    lastSpokenAt !== undefined &&
+    now - lastSpokenAt < cooldownMs
+  );
+}
+
+/**
  * An optional reply is sent whenever the model produced text; an empty/[SILENT]
  * reply stays silent. A required (tag/reply) turn always produces something,
  * falling back to a minimal acknowledgement if the model stayed silent.
@@ -52,6 +68,7 @@ export function outboundReply(
 
 export class DiscordBridge {
   private readonly client: Client;
+  private readonly lastSpokenAt = new Map<string, number>();
   private readonly commandStatus: Record<
     string,
     { at: string; commands: Record<string, { status: string; error?: string }> }
@@ -341,9 +358,26 @@ export class DiscordBridge {
     const channel = message.channel as GuildTextBasedChannel;
     if (!channel.isTextBased()) return;
 
+    if (
+      !decision.replyRequired &&
+      isOptionalReplyCoolingDown(
+        this.lastSpokenAt.get(message.channelId),
+        Date.now(),
+        this.config.speechCooldownMs
+      )
+    ) {
+      this.logger.info('suppressed optional reply by speech cooldown', {
+        channelId: message.channelId,
+        messageId: message.id,
+        cooldownMs: this.config.speechCooldownMs
+      });
+      return;
+    }
+
     await sendReply(this.asSendable(channel), outbound, {
       logger: this.logger
     });
+    this.lastSpokenAt.set(message.channelId, Date.now());
   }
 
   private asSendable(channel: GuildTextBasedChannel): SendableChannel {

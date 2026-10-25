@@ -5,6 +5,7 @@ export interface DiscordPluginConfig {
   readonly discordToken: string;
   readonly presetId: string;
   readonly replyTimeoutMs: number;
+  readonly speechCooldownMs: number;
   readonly modelSelection?: ModelSelection;
   readonly commandStatusPath?: string;
 }
@@ -16,5 +17,6 @@ export interface DiscordPluginSettings {
   readonly model: string;
   readonly reasoningEffort: string;
   readonly replyTimeoutMs: number;
+  readonly speechCooldownMs: number;
   readonly logLevel: LogLevel;
 }

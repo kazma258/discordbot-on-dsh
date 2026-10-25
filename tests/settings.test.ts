@@ -10,6 +10,7 @@ describe('normalizeSettings', () => {
       model: 'deepseek-v4.1-flash',
       reasoningEffort: 'low',
       replyTimeoutMs: 45_000,
+      speechCooldownMs: 30_000,
       logLevel: 'debug'
     });
 
@@ -19,8 +20,30 @@ describe('normalizeSettings', () => {
       model: 'deepseek-v4.1-flash',
       reasoningEffort: 'low',
       replyTimeoutMs: 45_000,
+      speechCooldownMs: 30_000,
       logLevel: 'debug'
     });
+  });
+
+  it('defaults the speech cooldown to 30000ms and rejects invalid values', () => {
+    const defaults = normalizeSettings(
+      Config({
+        preset: 'discord-whale',
+        provider: '',
+        model: '',
+        reasoningEffort: '',
+        replyTimeoutMs: 120_000,
+        logLevel: 'info'
+      })
+    );
+    expect(defaults.speechCooldownMs).toBe(30_000);
+
+    expect(
+      normalizeSettings({
+        speechCooldownMs: 600_001,
+        replyTimeoutMs: 120_000
+      }).speechCooldownMs
+    ).toBe(30_000);
   });
 
   it('still accepts a plain config object', () => {
@@ -31,6 +54,7 @@ describe('normalizeSettings', () => {
         model: ' m ',
         reasoningEffort: ' high ',
         replyTimeoutMs: 1,
+        speechCooldownMs: 0,
         logLevel: 'nope'
       })
     ).toMatchObject({
@@ -39,6 +63,7 @@ describe('normalizeSettings', () => {
       model: 'm',
       reasoningEffort: 'high',
       replyTimeoutMs: 120_000,
+      speechCooldownMs: 0,
       logLevel: 'info'
     });
   });

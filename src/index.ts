@@ -82,6 +82,7 @@ export const Config = z.object({
   model: z.string().default('').volatile(),
   reasoningEffort: z.string().default('').volatile(),
   replyTimeoutMs: z.number().default(120_000).volatile(),
+  speechCooldownMs: z.number().default(30_000).volatile(),
   logLevel: z.string().default('info').volatile()
 });
 
@@ -128,6 +129,14 @@ export function normalizeSettings(input: unknown): DiscordPluginSettings {
     rawReplyTimeoutMs <= 600_000
       ? rawReplyTimeoutMs
       : 120_000;
+  const rawSpeechCooldownMs = readVolatile<unknown>(raw.speechCooldownMs, 30_000);
+  const speechCooldownMs =
+    typeof rawSpeechCooldownMs === 'number' &&
+    Number.isSafeInteger(rawSpeechCooldownMs) &&
+    rawSpeechCooldownMs >= 0 &&
+    rawSpeechCooldownMs <= 600_000
+      ? rawSpeechCooldownMs
+      : 30_000;
   const rawProvider = readVolatile<unknown>(raw.provider, '');
   const rawModel = readVolatile<unknown>(raw.model, '');
   const rawEffort = readVolatile<unknown>(raw.reasoningEffort, '');
@@ -138,6 +147,7 @@ export function normalizeSettings(input: unknown): DiscordPluginSettings {
     model: typeof rawModel === 'string' ? rawModel.trim() : '',
     reasoningEffort: typeof rawEffort === 'string' ? rawEffort.trim() : '',
     replyTimeoutMs,
+    speechCooldownMs,
     logLevel
   };
 }
@@ -257,7 +267,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
     const containerService = new ContainerToolService({
       baseDir,
       containerDir: join(packageRoot, 'container'),
-      image: containerImageTag('0.5.0'),
+      image: containerImageTag('0.6.0'),
       uid: 1000,
       gid: 1000,
       idleMs: 15 * 60_000,
@@ -343,6 +353,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         discordToken: token,
         presetId: settings.preset,
         replyTimeoutMs: settings.replyTimeoutMs,
+        speechCooldownMs: settings.speechCooldownMs,
         modelSelection,
         commandStatusPath: join(baseDir, 'commands.json')
       };

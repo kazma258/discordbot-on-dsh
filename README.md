@@ -10,10 +10,11 @@
 - 提供 DSH 的 `web_fetch` 與 `web_search`。
 - 管理員用 `/deeplook` 開啟頻道讀取，用 `/deeplook mode:off` 關閉。
 - 模型依角色提示詞決定是否回覆一般訊息。
+- 可選發言冷卻，預設 30 秒。
 - @bot 或回覆 bot 的訊息必須回覆。
 - session 標題格式為 `[GuildName]ChannelName`。
 - 重啟 DSH 後接回原 session 與歷史對話。
-- Settings 卡片可選 provider、model、reasoning effort、preset、timeout 與 log level。
+- Settings 卡片可選 provider、model、reasoning effort、preset、timeout、發言冷卻與 log level。
 
 ## 先備環境
 
@@ -37,21 +38,21 @@
 1. 下載 release asset：
 
    ```text
-   local-dsh-discord-bot-0.5.0.tgz
+   local-dsh-discord-bot-0.6.0.tgz
    ```
 
 2. 用 DSH 安裝 tarball：
 
    ```bash
    dsh plugin --profile web add \
-     "https://github.com/kazma258/discordbot-on-dsh/releases/download/v0.5.0/local-dsh-discord-bot-0.5.0.tgz"
+     "https://github.com/kazma258/discordbot-on-dsh/releases/download/v0.6.0/local-dsh-discord-bot-0.6.0.tgz"
    ```
 
    本機檔案也可以直接安裝：
 
    ```bash
    dsh plugin --profile web add \
-     /absolute/path/to/local-dsh-discord-bot-0.5.0.tgz
+     /absolute/path/to/local-dsh-discord-bot-0.6.0.tgz
    ```
 
 3. 重啟 DSH：
@@ -119,6 +120,17 @@ Discord 不支援 `/deeplook off` 這種 trailing text。`off` 是 `mode` 選項
 - 模型在必須回覆時仍沉默，插件送出 `？`。
 - 未開啟的頻道不會送到 DSH。
 
+### 發言冷卻
+
+`Speech Cooldown (ms)` 控制可選回覆的最短間隔。預設是 `30000`。
+
+- 冷卻以 channel 為單位。
+- 冷卻只抑制非 @／非回覆 bot 的可選回覆。
+- @bot 或回覆 bot 的訊息不受冷卻限制。
+- 設 `0` 關閉冷卻。
+- 訊息仍會送到 DSH。模型仍會處理上下文；冷卻只阻止回覆送到 Discord。
+- 冷卻狀態存在記憶體。重啟 DSH 後重置。
+
 ### 工具
 
 模型可以使用以下工具：
@@ -175,6 +187,7 @@ web_search
 - Rootful Docker 的 broker 仍有 host root 風險。長期建議使用 rootless Podman。
 - 舊 session 會保留原本的 DSH cwd。container 工具會改綁 per-channel workspace。
 - 沒有常駐 shell 與背景 job。
+- 發言冷卻在模型產生回覆後才抑制。它不節省模型 token。
 
 ## 解除安裝
 
@@ -196,7 +209,7 @@ rm -rf ~/.dsh/discord-bot
 
 ```bash
 docker ps -aq --filter 'name=dsh-discord-' | xargs -r docker rm -f
-docker rmi local/dsh-discord-sandbox:0.5.0
+docker rmi local/dsh-discord-sandbox:0.6.0
 ```
 
 使用 Podman 時，把 `docker` 改成 `podman`。

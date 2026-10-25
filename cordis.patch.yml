@@ -8,4 +8,5 @@
         model: ''
         reasoningEffort: ''
         replyTimeoutMs: 120000
+        speechCooldownMs: 30000
         logLevel: info

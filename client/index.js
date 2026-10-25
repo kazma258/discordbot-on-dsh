@@ -20,6 +20,7 @@ window.__ModuleLoader__.load({
       model: '',
       reasoningEffort: '',
       replyTimeoutMs: '120000',
+      speechCooldownMs: '30000',
       logLevel: 'info'
     };
 
@@ -149,6 +150,9 @@ window.__ModuleLoader__.load({
         reasoningEffort: typeof current.reasoningEffort === 'string' ? current.reasoningEffort : '',
         replyTimeoutMs: String(
           typeof current.replyTimeoutMs === 'number' ? current.replyTimeoutMs : 120000
+        ),
+        speechCooldownMs: String(
+          typeof current.speechCooldownMs === 'number' ? current.speechCooldownMs : 30000
         ),
         logLevel: typeof current.logLevel === 'string' && current.logLevel ? current.logLevel : 'info'
       };
@@ -338,6 +342,10 @@ window.__ModuleLoader__.load({
           if (!Number.isSafeInteger(timeout) || timeout < 5000 || timeout > 600000) {
             throw new Error('Reply timeout 必須是 5000–600000 的整數');
           }
+          var cooldown = Number(draft.speechCooldownMs);
+          if (!Number.isSafeInteger(cooldown) || cooldown < 0 || cooldown > 600000) {
+            throw new Error('Speech cooldown 必須是 0–600000 的整數');
+          }
 
           var values = [
             ['preset', draft.preset.trim() || 'discord-whale'],
@@ -345,6 +353,7 @@ window.__ModuleLoader__.load({
             ['model', draft.model.trim()],
             ['reasoningEffort', draft.reasoningEffort || ''],
             ['replyTimeoutMs', timeout],
+            ['speechCooldownMs', cooldown],
             ['logLevel', draft.logLevel || 'info']
           ];
 
@@ -627,6 +636,18 @@ window.__ModuleLoader__.load({
                 onChange: function (event) { setField('replyTimeoutMs', event.target.value); },
                 style: inputStyle
               })
+            ),
+            h(Field, { label: 'Speech Cooldown (ms)' },
+              h('input', {
+                type: 'number',
+                min: 0,
+                max: 600000,
+                step: 1000,
+                value: draft.speechCooldownMs,
+                onChange: function (event) { setField('speechCooldownMs', event.target.value); },
+                style: inputStyle
+              }),
+              h('span', { style: hintStyle }, '0 = 關閉；預設 30000。只抑制非 @／非回覆的可選發言。')
             ),
             h(Field, { label: 'Log Level' },
               h('select', {
