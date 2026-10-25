@@ -282,6 +282,20 @@ describe('LocalSessionBackend', () => {
     });
   });
 
+  it('marks cooldown messages for recording without a reply', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      const backend = makeBackend(directory, controller, bus);
+      await backend.start();
+
+      await backend.onMessage({ ...MESSAGE, replyRequired: false, cooldownActive: true });
+
+      expect(controller.prompts[0]).toContain('[冷卻]');
+      await backend.stop();
+    });
+  });
+
   it('creates a per-channel workspace and binds the session', async () => {
     await withTempDir(async (directory) => {
       const bus = new EventBus();

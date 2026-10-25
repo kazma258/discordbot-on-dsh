@@ -1,7 +1,15 @@
 export const SILENT_TOKEN = '[SILENT]';
 
-export function formatDshPrompt(normalizedMessage: string, replyRequired: boolean): string {
-  const marker = replyRequired ? '[需回覆]' : '[可回覆]';
+export function formatDshPrompt(
+  normalizedMessage: string,
+  replyRequired: boolean,
+  cooldownActive = false
+): string {
+  const marker = replyRequired
+    ? '[需回覆]'
+    : cooldownActive
+      ? '[冷卻]'
+      : '[可回覆]';
   return `${marker} ${normalizedMessage}`;
 }
 

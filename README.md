@@ -128,7 +128,8 @@ Discord 不支援 `/deeplook off` 這種 trailing text。`off` 是 `mode` 選項
 - 冷卻只抑制非 @／非回覆 bot 的可選回覆。
 - @bot 或回覆 bot 的訊息不受冷卻限制。
 - 設 `0` 關閉冷卻。
-- 訊息仍會送到 DSH。模型仍會處理上下文；冷卻只阻止回覆送到 Discord。
+- 冷卻期訊息以 `[冷卻]` 送進 DSH。模型只記錄上下文，不回覆。
+- 冷卻只阻止回覆送到 Discord。訊息仍會進入 DSH session。
 - 冷卻狀態存在記憶體。重啟 DSH 後重置。
 
 ### 工具

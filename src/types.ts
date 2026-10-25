@@ -9,6 +9,8 @@ export interface IncomingDiscordMessage {
   readonly createdAt: Date;
   readonly text: string;
   readonly replyRequired: boolean;
+  /** Optional messages are recorded during cooldown without producing a reply. */
+  readonly cooldownActive?: boolean;
 }
 
 export interface MessageHandler {

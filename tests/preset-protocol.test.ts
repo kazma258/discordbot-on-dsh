@@ -8,6 +8,8 @@ describe('Discord preset protocol', () => {
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('絕對不要輸出 `[SILENT]`');
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('[可回覆]');
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('自行決定是否回覆');
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('[冷卻]');
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('不得回覆');
   });
 
   it('mounts only the container tools and web tools', () => {

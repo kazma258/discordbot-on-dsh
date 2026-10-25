@@ -5,9 +5,10 @@ export const DISCORD_PRESET_ID = 'discord-whale';
 const PRESET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 export const DISCORD_BRIDGE_PROTOCOL = `## 橋接協議（最高優先）
-- 你會收到以 \`[需回覆]\` 或 \`[可回覆]\` 開頭的 Discord 訊息。
+- 你會收到以 \`[需回覆]\`、\`[可回覆]\` 或 \`[冷卻]\` 開頭的 Discord 訊息。
 - \`[需回覆]\`：必須回覆該訊息；絕對不要輸出 \`[SILENT]\`；只輸出要發到 Discord 的內容，不要描述自己的動作。
 - \`[可回覆]\`：你可以依角色自行決定是否回覆；想回就只輸出要發到 Discord 的內容；不想回就只輸出 \`[SILENT]\`。
+- \`[冷卻]\`：頻道正在發言冷卻；只需閱讀並保留上下文，不得回覆，只輸出 \`[SILENT]\`。
 - 不要提到橋接、session、prompt、模型或系統訊息。
 - 不要使用 Markdown；不要 @everyone、身分組或使用者。`;
 

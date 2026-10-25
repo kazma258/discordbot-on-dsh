@@ -331,6 +331,13 @@ export class DiscordBridge {
       mentions
     });
 
+    const coolingDown =
+      !decision.replyRequired &&
+      isOptionalReplyCoolingDown(
+        this.lastSpokenAt.get(message.channelId),
+        Date.now(),
+        this.config.speechCooldownMs
+      );
     const incoming: IncomingDiscordMessage = {
       guildId,
       guildName,
@@ -341,7 +348,8 @@ export class DiscordBridge {
       authorName,
       createdAt: message.createdAt,
       text,
-      replyRequired: decision.replyRequired
+      replyRequired: decision.replyRequired,
+      cooldownActive: coolingDown
     };
 
     const reply = await this.handler.onMessage(incoming);
@@ -358,14 +366,7 @@ export class DiscordBridge {
     const channel = message.channel as GuildTextBasedChannel;
     if (!channel.isTextBased()) return;
 
-    if (
-      !decision.replyRequired &&
-      isOptionalReplyCoolingDown(
-        this.lastSpokenAt.get(message.channelId),
-        Date.now(),
-        this.config.speechCooldownMs
-      )
-    ) {
+    if (coolingDown) {
       this.logger.info('suppressed optional reply by speech cooldown', {
         channelId: message.channelId,
         messageId: message.id,
