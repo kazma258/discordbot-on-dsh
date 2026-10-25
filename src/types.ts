@@ -13,6 +13,8 @@ export interface IncomingDiscordMessage {
   readonly cooldownActive?: boolean;
   /** Delivery result of the previous bot reply, for the next model turn. */
   readonly deliveryNote?: string;
+  /** Application emoji names the model may reference as :name:. */
+  readonly emojiNames?: readonly string[];
 }
 
 export interface MessageHandler {

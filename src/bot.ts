@@ -28,6 +28,12 @@ import {
 } from './normalize.js';
 import { classifyMessage } from './policy.js';
 import { sendReply, type SendableChannel } from './sender.js';
+import {
+  applicationEmojiPromptNames,
+  buildApplicationEmojiMap,
+  renderApplicationEmojis,
+  type ApplicationEmojiInfo
+} from './emoji.js';
 import type { IncomingDiscordMessage, MessageHandler } from './types.js';
 
 function displayName(user: Pick<User, 'globalName' | 'username'>): string {
@@ -92,6 +98,8 @@ export class DiscordBridge {
   private readonly client: Client;
   private readonly lastSpokenAt = new Map<string, number>();
   private readonly deliveryStatus = new Map<string, DeliveryStatus>();
+  private applicationEmojis = new Map<string, ApplicationEmojiInfo>();
+  private applicationEmojiNames: string[] = [];
   private readonly commandStatus: Record<
     string,
     { at: string; commands: Record<string, { status: string; error?: string }> }
@@ -137,12 +145,29 @@ export class DiscordBridge {
 
     this.client.once(Events.ClientReady, (client) => {
       this.logger.info('Discord connected', { user: client.user.tag });
+      void this.loadApplicationEmojis();
       void this.registerCommandsForAllGuilds();
     });
   }
 
   async start(): Promise<void> {
     await this.client.login(this.config.discordToken);
+  }
+
+  private async loadApplicationEmojis(): Promise<void> {
+    try {
+      const application = this.client.application;
+      if (!application) return;
+      const fetched = await application.emojis.fetch();
+      this.applicationEmojis = buildApplicationEmojiMap(fetched.values());
+      this.applicationEmojiNames = applicationEmojiPromptNames(this.applicationEmojis);
+      this.logger.info('loaded application emojis', {
+        count: this.applicationEmojis.size,
+        promptCount: this.applicationEmojiNames.length
+      });
+    } catch (error) {
+      this.logger.warn('failed to load application emojis', { error });
+    }
   }
 
   async stop(): Promise<void> {
@@ -375,12 +400,16 @@ export class DiscordBridge {
       text,
       replyRequired: decision.replyRequired,
       cooldownActive: coolingDown,
-      ...(deliveryNote ? { deliveryNote } : {})
+      ...(deliveryNote ? { deliveryNote } : {}),
+      ...(this.applicationEmojiNames.length > 0
+        ? { emojiNames: this.applicationEmojiNames }
+        : {})
     };
 
     const reply = await this.handler.onMessage(incoming);
     const outbound = outboundReply(reply, decision.replyRequired);
     if (outbound === null) return;
+    const rendered = renderApplicationEmojis(outbound, this.applicationEmojis);
 
     if (decision.replyRequired && (typeof reply !== 'string' || reply.trim() === '')) {
       this.logger.warn('tagged message produced no reply; sending fallback', {
@@ -403,7 +432,7 @@ export class DiscordBridge {
     }
 
     try {
-      await sendReply(this.asSendable(channel), outbound, {
+      await sendReply(this.asSendable(channel), rendered, {
         logger: this.logger
       });
     } catch (error) {

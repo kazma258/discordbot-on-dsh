@@ -10,6 +10,7 @@
 - 提供 DSH 的 `web_fetch` 與 `web_search`。
 - 管理員用 `/deeplook` 開啟頻道讀取，用 `/deeplook mode:off` 關閉。
 - 模型依角色提示詞決定是否回覆一般訊息。
+- 使用 application-owned emoji；模型可用 `:name:` 引用。
 - 可選發言冷卻，預設 30 秒。
 - @bot 或回覆 bot 的訊息必須回覆。
 - session 標題格式為 `[GuildName]ChannelName`。
@@ -135,6 +136,34 @@ Discord 不支援 `/deeplook off` 這種 trailing text。`off` 是 `mode` 選項
 - 這個狀態只存在 DSH prompt，不會送到 Discord。
 - 冷卻狀態存在記憶體。重啟 DSH 後重置。
 
+### Application emoji
+
+Bot 啟動後會讀取 application-owned emoji：
+
+```ts
+await client.application.emojis.fetch()
+```
+
+模型看到的 prompt 會附上最多 80 個名稱：
+
+```text
+[可用應用表情] :wave: :party:
+```
+
+模型用 `:name:` 輸出。bridge 查目錄後轉成：
+
+```text
+<:name:id>
+<a:name:id>
+```
+
+- application emoji 只屬於這個 application。
+- application emoji 不需要 `USE_EXTERNAL_EMOJIS`。
+- 未列出的名稱不會被替換。
+- 模型不得自行產生 emoji ID。
+- 上傳新 emoji 後，重啟 DSH 或重新連線 bot，讓目錄重新抓取。
+- prompt 只列前 80 個名稱。bridge 仍保留完整 ID 目錄。
+
 ### 工具
 
 模型可以使用以下工具：
@@ -181,6 +210,7 @@ web_search
 - `container_write` 與 `container_edit` 有 workspace 容量檢查。
 - `container_bash` 沒有硬性容量限制。
 - `web_fetch` 只接受 HTTP 與 HTTPS。私有位址、loopback、link-local 與 cloud metadata 會被拒絕。
+- application emoji 只傳名稱，不把應用程式 token 或 emoji ID 暴露給模型。
 - 不把 Docker socket 掛進容器。
 - 容器工具透過 plugin 內的窄 service 呼叫 engine。模型不能直接使用 Docker API。
 - `.env` 不進 Git，也不進 release tarball。
