@@ -36,6 +36,28 @@ function displayName(user: Pick<User, 'globalName' | 'username'>): string {
 
 export const TAGGED_SILENT_FALLBACK = '？';
 
+export type DeliveryStatus = 'sent' | 'unsent' | 'failed';
+
+/**
+ * Tell the model whether its previous visible reply reached Discord. The
+ * assistant message already exists in the session log, so without this
+ * receipt a cooldown-suppressed reply looks as if the user saw it.
+ */
+export function formatDeliveryStatus(
+  status: DeliveryStatus | undefined
+): string | undefined {
+  if (status === 'sent') {
+    return '[發送狀態] 上一則回覆已送到 Discord；使用者能看到它。';
+  }
+  if (status === 'unsent') {
+    return '[發送狀態] 上一則回覆沒有送到 Discord（發言冷卻）；使用者沒有看到它。不要假設使用者看過它。';
+  }
+  if (status === 'failed') {
+    return '[發送狀態] 上一則回覆傳送失敗；使用者沒有看到它。';
+  }
+  return undefined;
+}
+
 /**
  * The speech cooldown only suppresses optional replies. Required replies
  * (mentions and replies to the bot) always bypass the cooldown.
@@ -69,6 +91,7 @@ export function outboundReply(
 export class DiscordBridge {
   private readonly client: Client;
   private readonly lastSpokenAt = new Map<string, number>();
+  private readonly deliveryStatus = new Map<string, DeliveryStatus>();
   private readonly commandStatus: Record<
     string,
     { at: string; commands: Record<string, { status: string; error?: string }> }
@@ -338,6 +361,8 @@ export class DiscordBridge {
         Date.now(),
         this.config.speechCooldownMs
       );
+    const deliveryNote = formatDeliveryStatus(this.deliveryStatus.get(message.channelId));
+    this.deliveryStatus.delete(message.channelId);
     const incoming: IncomingDiscordMessage = {
       guildId,
       guildName,
@@ -349,7 +374,8 @@ export class DiscordBridge {
       createdAt: message.createdAt,
       text,
       replyRequired: decision.replyRequired,
-      cooldownActive: coolingDown
+      cooldownActive: coolingDown,
+      ...(deliveryNote ? { deliveryNote } : {})
     };
 
     const reply = await this.handler.onMessage(incoming);
@@ -367,6 +393,7 @@ export class DiscordBridge {
     if (!channel.isTextBased()) return;
 
     if (coolingDown) {
+      this.deliveryStatus.set(message.channelId, 'unsent');
       this.logger.info('suppressed optional reply by speech cooldown', {
         channelId: message.channelId,
         messageId: message.id,
@@ -375,10 +402,16 @@ export class DiscordBridge {
       return;
     }
 
-    await sendReply(this.asSendable(channel), outbound, {
-      logger: this.logger
-    });
+    try {
+      await sendReply(this.asSendable(channel), outbound, {
+        logger: this.logger
+      });
+    } catch (error) {
+      this.deliveryStatus.set(message.channelId, 'failed');
+      throw error;
+    }
     this.lastSpokenAt.set(message.channelId, Date.now());
+    this.deliveryStatus.set(message.channelId, 'sent');
   }
 
   private asSendable(channel: GuildTextBasedChannel): SendableChannel {

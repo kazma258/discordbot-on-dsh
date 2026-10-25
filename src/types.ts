@@ -11,6 +11,8 @@ export interface IncomingDiscordMessage {
   readonly replyRequired: boolean;
   /** Optional messages are recorded during cooldown without producing a reply. */
   readonly cooldownActive?: boolean;
+  /** Delivery result of the previous bot reply, for the next model turn. */
+  readonly deliveryNote?: string;
 }
 
 export interface MessageHandler {

@@ -253,7 +253,12 @@ export class LocalSessionBackend implements MessageHandler {
     });
     const reply = this.waitForTurn(message.channelId, connection.sessionId, this.replyTimeoutMs);
     const content = [
-      { type: 'text' as const, text: formatDshPrompt(message.text, message.replyRequired, message.cooldownActive === true) }
+      { type: 'text' as const, text: formatDshPrompt(
+        message.text,
+        message.replyRequired,
+        message.cooldownActive === true,
+        message.deliveryNote
+      ) }
     ];
     try {
       await this.controller.prompt(

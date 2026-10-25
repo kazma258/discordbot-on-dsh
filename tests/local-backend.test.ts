@@ -289,9 +289,15 @@ describe('LocalSessionBackend', () => {
       const backend = makeBackend(directory, controller, bus);
       await backend.start();
 
-      await backend.onMessage({ ...MESSAGE, replyRequired: false, cooldownActive: true });
+      await backend.onMessage({
+        ...MESSAGE,
+        replyRequired: false,
+        cooldownActive: true,
+        deliveryNote: '[發送狀態] 上一則回覆沒有送到 Discord（發言冷卻）。'
+      });
 
       expect(controller.prompts[0]).toContain('[冷卻]');
+      expect(controller.prompts[0]).toContain('[發送狀態]');
       await backend.stop();
     });
   });

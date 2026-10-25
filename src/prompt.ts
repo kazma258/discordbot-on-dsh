@@ -3,14 +3,16 @@ export const SILENT_TOKEN = '[SILENT]';
 export function formatDshPrompt(
   normalizedMessage: string,
   replyRequired: boolean,
-  cooldownActive = false
+  cooldownActive = false,
+  deliveryNote?: string
 ): string {
   const marker = replyRequired
     ? '[需回覆]'
     : cooldownActive
       ? '[冷卻]'
       : '[可回覆]';
-  return `${marker} ${normalizedMessage}`;
+  const note = deliveryNote === undefined ? '' : `\n${deliveryNote}`;
+  return `${marker} ${normalizedMessage}${note}`;
 }
 
 /**

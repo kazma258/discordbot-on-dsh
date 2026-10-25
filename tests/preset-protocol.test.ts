@@ -10,6 +10,7 @@ describe('Discord preset protocol', () => {
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('自行決定是否回覆');
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('[冷卻]');
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('不得回覆');
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('[發送狀態]');
   });
 
   it('mounts only the container tools and web tools', () => {
