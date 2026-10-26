@@ -15,7 +15,23 @@ export interface IncomingDiscordMessage {
   readonly deliveryNote?: string;
   /** Application emoji names the model may reference as :name:. */
   readonly emojiPrompt?: string;
+  /** Optional JPEG/PNG frames for a background video result. */
+  readonly imageParts?: readonly ImagePromptPart[];
 }
+
+export type ImagePromptMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+export interface ImagePromptPart {
+  readonly type: 'image';
+  readonly mediaType: ImagePromptMediaType;
+  /** Canonical base64 bytes accepted by DSH's prompt admission. */
+  readonly data: string;
+  readonly name?: string;
+}
+
+export type PromptContentPart =
+  | { readonly type: 'text'; readonly text: string }
+  | ImagePromptPart;
 
 export interface MessageHandler {
   /** Returns the final reply text, or null/empty when no reply should be sent. */
@@ -40,7 +56,7 @@ export interface SessionControllerLike {
       requestId: string;
       sessionId: string;
       mode: 'queue';
-      content: readonly { type: 'text'; text: string }[];
+      content: readonly PromptContentPart[];
     },
     signal?: AbortSignal
   ): Promise<unknown>;

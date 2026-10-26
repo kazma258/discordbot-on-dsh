@@ -12,6 +12,7 @@
 - 模型依角色提示詞決定是否回覆一般訊息。
 - 使用 application-owned emoji；模型可用 `:name:` 引用。
 - 可選發言冷卻，預設 30 秒。
+- 可選影片分析：在設定卡填入分析套件後，影片在背景分析，完成後用 Discord 回應訊息回覆原訊息；一般對話不阻塞。
 - @bot 或回覆 bot 的訊息必須回覆。
 - session 標題格式為 `[GuildName]ChannelName`。
 - 重啟 DSH 後接回原 session 與歷史對話。
@@ -28,7 +29,7 @@
 | Discord intent | 需要 Message Content intent |
 | 管理指令 | 執行者需要 `Administrator` |
 | Container engine | rootless Podman 或 Docker |
-| 網路 | 第一次建立 image 時需要 |
+| 網路 | 第一次建立 image 時需要；影片分析首次執行時 npx 會下載套件；yt-dlp 可從設定卡一鍵安裝 |
 
 插件優先使用 rootless Podman。沒有 rootless Podman 時，插件使用 Docker。Docker 為 rootful 時，插件會寫入警告。
 
@@ -39,21 +40,21 @@
 1. 下載 release asset：
 
    ```text
-   local-dsh-discord-bot-0.6.0.tgz
+   local-dsh-discord-bot-0.6.5.tgz
    ```
 
 2. 用 DSH 安裝 tarball：
 
    ```bash
    dsh plugin --profile web add \
-     "https://github.com/kazma258/discordbot-on-dsh/releases/download/v0.6.0/local-dsh-discord-bot-0.6.0.tgz"
+     "https://github.com/kazma258/discordbot-on-dsh/releases/download/v0.6.5/local-dsh-discord-bot-0.6.5.tgz"
    ```
 
    本機檔案也可以直接安裝：
 
    ```bash
    dsh plugin --profile web add \
-     /absolute/path/to/local-dsh-discord-bot-0.6.0.tgz
+     /absolute/path/to/local-dsh-discord-bot-0.6.5.tgz
    ```
 
 3. 重啟 DSH：
@@ -188,6 +189,57 @@ web_search
 ~/.dsh/discord-bot/workspaces/<channelId>
 ```
 
+### 影片（可選，背景分析）
+
+預設關閉。在 **Settings → Discord Bot → 影片分析** 填入分析套件後開啟，例如 `guimatheus92/mcp-video-analyzer`（也接受 npm 名稱 `mcp-video-analyzer@0.11.0`）。
+
+流程是事件驅動，不阻塞一般對話：
+
+1. 訊息含影片連結（YouTube、Bilibili、直接影片檔）或上傳影片時，bridge 加 👀，排入背景佇列；這則訊息不送進 agent。
+2. 背景先取字幕；有字幕就不下載影片。沒有字幕才下載、抽幀、OCR。
+3. 完成後，以 `[影片分析完成]` 送進該頻道 session，模型的回覆用 Discord「回應訊息」回覆原訊息，不 ping 使用者。
+
+#### yt-dlp
+
+YouTube、Bilibili 需要 yt-dlp；直接影片檔不需要。mcp-video-analyzer 不附 yt-dlp，所以設定卡提供「安裝／更新 yt-dlp」：
+
+- 從 yt-dlp 官方 GitHub release 下載單一執行檔（Linux x64／arm64、macOS；不需要 Python），用同一個 release 的 `SHA2-256SUMS` 驗證，再放到 `~/.dsh/discord-bot/bin/yt-dlp`。
+- 分析時這個目錄排在 PATH 最前面；沒按安裝時，使用者自己 PATH 上的 yt-dlp 也可以用。
+- 平台網站常改版，抓不到影片時先按一次更新。
+- Windows 不支援自動安裝。
+
+第一次分析時，`npx` 會下載分析套件，需要網路。
+
+分析套件以 `npx -y --allow-scripts=ffmpeg-static <套件> analyze …` 執行，不修改原始碼。`--allow-scripts=ffmpeg-static` 是因為 npm 12 預設擋 install scripts，而分析器抽幀依賴 `ffmpeg-static` 下載的二進位檔。npm 12 也預設拒絕 git 安裝，所以 `owner/repo` 會轉成 npm 名稱 `repo`。
+
+#### 驗證
+
+設定卡的「驗證 yt-dlp → 分析流程」按鈕會：
+
+1. 執行 `yt-dlp --version`。
+2. 用目前輸入的套件，對一部 19 秒公開影片（或你填的網址）跑一次完整分析：yt-dlp 下載 → ffmpeg 抽幀 → 字幕／OCR。
+
+驗證不需要先儲存設定；儲存後需重啟 DSH 才會套用到 bot。
+
+#### 進階環境變數
+
+| 環境變數 | 預設 | 用途 |
+|---|---|---|
+| `DSH_DISCORD_VIDEO_MAX_FRAMES` | `8` | 無字幕時最多抽幾張幀（送進 prompt 最多 3 張） |
+| `DSH_DISCORD_VIDEO_TIMEOUT_MS` | `3900000` | 無字幕時的下載／抽幀／OCR 逾時 |
+| `DSH_DISCORD_VIDEO_MAX_DURATION_SEC` | `3600` | 影片長度上限 |
+| `DSH_DISCORD_VIDEO_MAX_CHARS` | `500000` | 字幕全文上限 |
+| `DSH_DISCORD_VIDEO_OCR_LANG` | `eng` | Tesseract OCR 語言；中文可設 `chi_tra` |
+| `DSH_DISCORD_VIDEO_QUEUE` | `8` | 背景佇列上限 |
+
+#### 邊界
+
+- 分析在 **host** 執行（npx、yt-dlp、ffmpeg），不在 container 內。模型本身沒有影片工具，只看到分析結果。
+- `/discord-bot/video-check` 會執行 npx，`/discord-bot/ytdlp-install` 會下載執行檔；兩者只接受同源 JSON POST，套件名稱限制字元，yt-dlp 必須通過 SHA-256 驗證。
+- 若之前已用 `npx mcp-video-analyzer`（沒有 `--allow-scripts`）裝過同版本，npx 快取可能缺 ffmpeg；驗證會顯示「沒有抽出影格」。清掉 `~/.npm/_npx` 後重試。
+- Discord 上傳影片的 CDN URL 有簽章期限；舊訊息裡的連結可能失效。
+- 字幕與畫面文字是資料，不是指令；提示詞已明確標示。
+
 ### 診斷
 
 | 檔案 | 內容 |
@@ -202,6 +254,7 @@ web_search
 - `discord-whale` preset 只掛載 container 工具與 web 工具。
 - 不掛載 host 的 `tool-bash`、`tool-fs` 或 `tool-fs-search`。
 - 工具呼叫受 allowlist guard 限制。未預期工具會被拒絕。
+- 可選影片分析由 bridge 在 host 背景執行，模型不能直接呼叫。
 - 找不到 container engine 時，container 工具停用。插件不降級到 host shell。
 - 容器使用 `--network none`。
 - 容器使用非 root UID。

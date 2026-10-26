@@ -21,7 +21,8 @@ window.__ModuleLoader__.load({
       reasoningEffort: '',
       replyTimeoutMs: '120000',
       speechCooldownMs: '30000',
-      logLevel: 'info'
+      logLevel: 'info',
+      videoPackage: ''
     };
 
     var pageStyle = {
@@ -154,7 +155,8 @@ window.__ModuleLoader__.load({
         speechCooldownMs: String(
           typeof current.speechCooldownMs === 'number' ? current.speechCooldownMs : 30000
         ),
-        logLevel: typeof current.logLevel === 'string' && current.logLevel ? current.logLevel : 'info'
+        logLevel: typeof current.logLevel === 'string' && current.logLevel ? current.logLevel : 'info',
+        videoPackage: typeof current.videoPackage === 'string' ? current.videoPackage : ''
       };
     }
 
@@ -251,8 +253,60 @@ window.__ModuleLoader__.load({
       var catalog = catalogState[0];
       var setCatalog = catalogState[1];
 
+      var videoCheckState = React.useState({ status: 'idle', url: '' });
+      var videoCheck = videoCheckState[0];
+      var setVideoCheck = videoCheckState[1];
+
       function setNotice(kind, text) {
         setNoticeState({ kind: kind, text: text });
+      }
+
+      var ytDlpState = React.useState({ status: 'idle', text: '' });
+      var ytDlp = ytDlpState[0];
+      var setYtDlp = ytDlpState[1];
+
+      async function installYtDlp() {
+        setYtDlp({ status: 'running', text: '下載並驗證 yt-dlp 中…（約 40MB）' });
+        try {
+          var response = await fetch('/discord-bot/ytdlp-install', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: '{}'
+          });
+          var body = await response.json().catch(function () { return null; });
+          if (!response.ok || !body || body.ok !== true) {
+            throw new Error((body && body.error) || ('HTTP ' + response.status));
+          }
+          setYtDlp({ status: 'ok', text: '已安裝 ' + body.asset + ' → ' + body.path + '（SHA-256 已驗證）' });
+        } catch (error) {
+          setYtDlp({ status: 'failed', text: '安裝失敗：' + (error instanceof Error ? error.message : String(error)) });
+        }
+      }
+
+      async function runVideoCheck() {
+        setVideoCheck(function (previous) {
+          return { status: 'running', url: previous.url };
+        });
+        try {
+          var response = await fetch('/discord-bot/video-check', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ package: draft.videoPackage, url: videoCheck.url })
+          });
+          var body = await response.json().catch(function () { return null; });
+          if (!body || !Array.isArray(body.steps)) {
+            throw new Error((body && body.error) || ('HTTP ' + response.status));
+          }
+          setVideoCheck({ status: body.ok ? 'ok' : 'failed', url: videoCheck.url, result: body });
+        } catch (error) {
+          setVideoCheck({
+            status: 'failed',
+            url: videoCheck.url,
+            result: { steps: [{ name: '驗證', ok: false, detail: error instanceof Error ? error.message : String(error) }] }
+          });
+        }
       }
 
       React.useEffect(function () {
@@ -354,7 +408,8 @@ window.__ModuleLoader__.load({
             ['reasoningEffort', draft.reasoningEffort || ''],
             ['replyTimeoutMs', timeout],
             ['speechCooldownMs', cooldown],
-            ['logLevel', draft.logLevel || 'info']
+            ['logLevel', draft.logLevel || 'info'],
+            ['videoPackage', draft.videoPackage.trim()]
           ];
 
           for (var index = 0; index < values.length; index += 1) {
@@ -623,6 +678,67 @@ window.__ModuleLoader__.load({
               style: inputStyle
             })
           )
+        ),
+        h('section', { style: cardStyle },
+          h('h3', { style: sectionTitleStyle }, '影片分析'),
+          h('p', { style: hintStyle },
+            '留空 = 關閉。填入後，頻道裡的影片連結或上傳影片會在背景分析，完成後以「回應訊息」回覆原訊息，不會卡住一般對話。' +
+            '套件以 npx 執行、不修改原始碼。沒有 yt-dlp 時，按「安裝／更新 yt-dlp」下載官方執行檔。'
+          ),
+          h('div', { style: gridStyle },
+            h(Field, {
+              label: '影片分析 MCP 套件',
+              hint: 'npm 套件名稱或 skills id，例如 guimatheus92/mcp-video-analyzer 或 mcp-video-analyzer@0.11.0'
+            },
+              h('input', {
+                value: draft.videoPackage,
+                placeholder: 'guimatheus92/mcp-video-analyzer',
+                onChange: function (event) {
+                  setField('videoPackage', event.target.value);
+                  setVideoCheck(function (previous) { return { status: 'idle', url: previous.url }; });
+                },
+                style: inputStyle
+              })
+            ),
+            h(Field, { label: '驗證用影片網址（選填）', hint: '留空使用 19 秒的公開 YouTube 影片' },
+              h('input', {
+                value: videoCheck.url,
+                placeholder: 'https://www.youtube.com/watch?v=…',
+                onChange: function (event) {
+                  var url = event.target.value;
+                  setVideoCheck(function (previous) { return Object.assign({}, previous, { url: url }); });
+                },
+                style: inputStyle
+              })
+            )
+          ),
+          h('div', { style: rowStyle },
+            h('button', {
+              type: 'button',
+              disabled: ytDlp.status === 'running',
+              onClick: installYtDlp,
+              style: ytDlp.status === 'ok' ? successButtonStyle : secondaryButtonStyle
+            }, ytDlp.status === 'running' ? '安裝中…' : ytDlp.status === 'ok' ? 'yt-dlp 已安裝 ✓' : '安裝／更新 yt-dlp'),
+            h('button', {
+              type: 'button',
+              disabled: videoCheck.status === 'running' || draft.videoPackage.trim() === '',
+              onClick: runVideoCheck,
+              style: videoCheck.status === 'ok' ? successButtonStyle : secondaryButtonStyle
+            }, videoCheck.status === 'running'
+              ? '驗證中…（首次需下載套件，約 1–3 分鐘）'
+              : videoCheck.status === 'ok' ? '驗證通過 ✓' : '驗證 yt-dlp → 分析流程')
+          ),
+          ytDlp.text
+            ? h('p', { style: Object.assign({}, statusStyle, { color: ytDlp.status === 'failed' ? '#e5484d' : ytDlp.status === 'ok' ? '#2f9e67' : undefined }) }, ytDlp.text)
+            : null,
+          videoCheck.result
+            ? h('ul', { style: Object.assign({}, statusStyle, { paddingLeft: '18px' }) },
+                videoCheck.result.steps.map(function (step, index) {
+                  return h('li', { key: index, style: { color: step.ok ? '#2f9e67' : '#e5484d' } },
+                    (step.ok ? '✓ ' : '✗ ') + step.name + '：' + step.detail);
+                })
+              )
+            : null
         ),
         h('section', { style: cardStyle },
           h('h3', { style: sectionTitleStyle }, '進階'),

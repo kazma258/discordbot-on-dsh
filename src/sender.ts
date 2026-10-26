@@ -24,6 +24,8 @@ export interface SendReplyOptions {
   readonly logger?: Logger;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly maxRetries?: number;
+  /** When set, the first chunk is sent as a Discord reply to this message. */
+  readonly replyToMessageId?: string;
 }
 
 interface RateLimitLike {
@@ -84,7 +86,15 @@ export async function sendReply(
       try {
         await channel.send({
           content: chunk,
-          allowedMentions: ALLOWED_MENTIONS
+          allowedMentions: ALLOWED_MENTIONS,
+          ...(options.replyToMessageId !== undefined && sent === 0
+            ? {
+                reply: {
+                  messageReference: options.replyToMessageId,
+                  failIfNotExists: false
+                }
+              }
+            : {})
         });
         sent += 1;
         break;

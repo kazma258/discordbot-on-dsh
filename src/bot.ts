@@ -36,6 +36,9 @@ import {
   type ApplicationEmojiInfo
 } from './emoji.js';
 import type { IncomingDiscordMessage, MessageHandler } from './types.js';
+import { VideoAnalyzer, type VideoAnalysis } from './video/analyzer.js';
+import { VideoJobManager, type VideoJob } from './video/jobs.js';
+import { extractVideoLink } from './video/links.js';
 
 function displayName(user: Pick<User, 'globalName' | 'username'>): string {
   return user.globalName ?? user.username;
@@ -101,6 +104,7 @@ export class DiscordBridge {
   private readonly deliveryStatus = new Map<string, DeliveryStatus>();
   private applicationEmojis = new Map<string, ApplicationEmojiInfo>();
   private applicationEmojiPromptText?: string;
+  private readonly videoJobs?: VideoJobManager;
   private readonly commandStatus: Record<
     string,
     { at: string; commands: Record<string, { status: string; error?: string }> }
@@ -112,6 +116,28 @@ export class DiscordBridge {
     private readonly access: ChannelAccessStore,
     private readonly logger: Logger
   ) {
+    const video = config.videoJobs;
+    if (video !== undefined) {
+      this.videoJobs = new VideoJobManager({
+        analyzer: new VideoAnalyzer({
+          packageSpec: video.packageSpec,
+          cacheDir: video.cacheDir,
+          binDir: video.binDir,
+          jobsDir: video.jobsDir,
+          logger,
+          maxFrames: video.maxFrames,
+          timeoutMs: video.timeoutMs,
+          maxDurationSec: video.maxDurationSec,
+          maxEvidenceChars: video.maxEvidenceChars,
+          ocrLanguage: video.ocrLanguage
+        }),
+        logger,
+        maxConcurrent: video.maxConcurrent,
+        maxQueue: video.maxQueue,
+        onComplete: (job, result) => this.deliverVideoResult(job, result)
+      });
+    }
+
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -172,6 +198,7 @@ export class DiscordBridge {
   }
 
   async stop(): Promise<void> {
+    this.videoJobs?.dispose();
     await this.client.destroy();
   }
 
@@ -322,11 +349,15 @@ export class DiscordBridge {
     const images = message.attachments.filter(
       (attachment) => attachment.contentType?.startsWith('image/') ?? false
     ).size;
-    const files = Math.max(0, message.attachments.size - images);
+    const videos = message.attachments
+      .filter((attachment) => attachment.contentType?.startsWith('video/') ?? false)
+      .map((attachment) => attachment.url);
+    const files = Math.max(0, message.attachments.size - images - videos.length);
 
     return {
       stickers: message.stickers.size,
       images,
+      videos,
       files
     };
   }
@@ -379,6 +410,41 @@ export class DiscordBridge {
       media: this.mediaOf(message),
       mentions
     });
+
+    const videoAttachment = message.attachments.find(
+      (attachment) => attachment.contentType?.startsWith('video/') ?? false
+    );
+    const videoLink =
+      extractVideoLink(message.content) ??
+      (videoAttachment ? { site: 'direct' as const, url: videoAttachment.url } : null);
+    if (videoLink !== null && this.videoJobs !== undefined) {
+      const outcome = this.videoJobs.enqueue({
+        id: message.id,
+        message,
+        link: videoLink,
+        normalizedText: text,
+        originalContent: message.content,
+        authorName,
+        guildName,
+        channelName,
+        createdAt: message.createdAt
+      });
+      if (outcome === 'queued') {
+        this.logger.info('video message moved to background analysis', {
+          channelId: message.channelId,
+          messageId: message.id,
+          site: videoLink.site
+        });
+        void message.react('👀').catch((error: unknown) => {
+          this.logger.debug('could not add video reaction', { messageId: message.id, error });
+        });
+      } else if (outcome === 'full') {
+        await this.replyVideoQueueFull(message);
+      } else {
+        this.logger.debug('duplicate video message ignored', { messageId: message.id });
+      }
+      return;
+    }
 
     const coolingDown =
       !decision.replyRequired &&
@@ -442,6 +508,116 @@ export class DiscordBridge {
     }
     this.lastSpokenAt.set(message.channelId, Date.now());
     this.deliveryStatus.set(message.channelId, 'sent');
+  }
+
+  private async replyVideoQueueFull(message: Message): Promise<void> {
+    const channel = message.channel as GuildTextBasedChannel;
+    if (!channel.isTextBased()) return;
+    try {
+      await sendReply(this.asSendable(channel), '影片分析排隊已滿，請稍後再貼一次。', {
+        logger: this.logger,
+        replyToMessageId: message.id
+      });
+    } catch (error) {
+      this.logger.warn('failed to report full video queue', {
+        channelId: message.channelId,
+        messageId: message.id,
+        error
+      });
+    }
+  }
+
+  private async deliverVideoResult(job: VideoJob, result: VideoAnalysis): Promise<void> {
+    if (!this.access.isEnabled(job.message.channelId)) {
+      this.logger.debug('video result skipped; channel access disabled', {
+        channelId: job.message.channelId,
+        messageId: job.id
+      });
+      return;
+    }
+
+    const channel = job.message.channel as GuildTextBasedChannel;
+    if (!channel.isTextBased()) return;
+
+    const original = job.originalContent.replace(/https?:\/\/\S+/gi, '[影片連結]').trim();
+    const body = result.ok
+      ? result.evidenceText
+      : `[影片分析失敗] ${result.error ?? '未知錯誤'}`;
+    const prompt = [
+      '[影片分析完成] 使用者剛剛貼的影片已在背景分析完成。',
+      `原始訊息：${original === '' ? '(只有影片連結)' : original}`,
+      body,
+      '請用你的角色回覆這位使用者；用 [mm:ss] 標出時間；不要提到背景工作、工具、下載或分析流程。'
+    ].join('\n');
+
+    const imageParts = result.frames.map((frame) => ({
+      type: 'image' as const,
+      mediaType: frame.mediaType,
+      data: frame.data,
+      name: frame.name
+    }));
+    const incoming: IncomingDiscordMessage = {
+      guildId: job.message.guildId ?? '',
+      guildName: job.guildName,
+      channelId: job.message.channelId,
+      channelName: job.channelName,
+      messageId: `${job.id}:video`,
+      authorId: job.message.author.id,
+      authorName: job.authorName,
+      createdAt: job.createdAt,
+      text: prompt,
+      replyRequired: true,
+      cooldownActive: false,
+      ...(this.applicationEmojiPromptText
+        ? { emojiPrompt: this.applicationEmojiPromptText }
+        : {}),
+      ...(imageParts.length > 0 ? { imageParts } : {})
+    };
+
+    let reply: string | null = null;
+    try {
+      reply = await this.handler.onMessage(incoming);
+    } catch (error) {
+      this.logger.warn('video completion prompt failed', { messageId: job.id, error });
+      if (imageParts.length > 0) {
+        try {
+          reply = await this.handler.onMessage({ ...incoming, imageParts: undefined });
+        } catch (retryError) {
+          this.logger.error('video completion text-only retry failed', {
+            messageId: job.id,
+            error: retryError
+          });
+        }
+      }
+    }
+
+    const text =
+      typeof reply === 'string' && reply.trim() !== ''
+        ? reply.trim()
+        : '影片分析完成，但這次沒有整理出內容。';
+    const rendered = renderApplicationEmojis(text, this.applicationEmojis);
+
+    try {
+      await sendReply(this.asSendable(channel), rendered, {
+        logger: this.logger,
+        replyToMessageId: job.message.id
+      });
+      this.lastSpokenAt.set(job.message.channelId, Date.now());
+      this.deliveryStatus.set(job.message.channelId, 'sent');
+      this.logger.info('video result delivered', {
+        messageId: job.id,
+        channelId: job.message.channelId,
+        frames: imageParts.length,
+        chars: rendered.length
+      });
+    } catch (error) {
+      this.deliveryStatus.set(job.message.channelId, 'failed');
+      this.logger.error('failed to deliver video result', {
+        messageId: job.id,
+        channelId: job.message.channelId,
+        error
+      });
+    }
   }
 
   private asSendable(channel: GuildTextBasedChannel): SendableChannel {

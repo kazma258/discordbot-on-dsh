@@ -9,6 +9,7 @@ import { createLogger } from '../src/logger.js';
 import type {
   IncomingDiscordMessage,
   ModelSelection,
+  PromptContentPart,
   SessionControllerLike,
   SessionEventLike,
   SessionEventHandler
@@ -56,6 +57,7 @@ class FakeController implements SessionControllerLike {
   turn = 0;
   readonly cwds: string[] = [];
   readonly prompts: string[] = [];
+  readonly contents: Array<readonly PromptContentPart[]> = [];
   readonly cancels: string[] = [];
   readonly modelSelections: Array<{
     sessionId: string;
@@ -82,9 +84,10 @@ class FakeController implements SessionControllerLike {
     requestId: string;
     sessionId: string;
     mode: 'queue';
-    content: readonly { type: 'text'; text: string }[];
+    content: readonly PromptContentPart[];
   }): Promise<unknown> {
-    this.prompts.push(request.content[0]?.text ?? '');
+    this.prompts.push(request.content[0]?.type === 'text' ? request.content[0].text : '');
+    this.contents.push(request.content);
     if (this.failNextPrompt) {
       this.failNextPrompt = false;
       throw { code: 'session/not-found' };
@@ -182,6 +185,31 @@ describe('LocalSessionBackend', () => {
         }
       });
 
+      await backend.stop();
+    });
+  });
+
+  it('passes image parts after the text prompt', async () => {
+    await withTempDir(async (directory) => {
+      const bus = new EventBus();
+      const controller = new FakeController(bus);
+      const backend = makeBackend(directory, controller, bus);
+      await backend.start();
+
+      await backend.onMessage({
+        ...MESSAGE,
+        imageParts: [
+          { type: 'image', mediaType: 'image/jpeg', data: 'AAAA', name: 'frame.jpg' }
+        ]
+      });
+
+      expect(controller.contents[0]).toHaveLength(2);
+      expect(controller.contents[0]?.[1]).toMatchObject({
+        type: 'image',
+        mediaType: 'image/jpeg',
+        data: 'AAAA',
+        name: 'frame.jpg'
+      });
       await backend.stop();
     });
   });

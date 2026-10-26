@@ -11,7 +11,8 @@ describe('normalizeSettings', () => {
       reasoningEffort: 'low',
       replyTimeoutMs: 45_000,
       speechCooldownMs: 30_000,
-      logLevel: 'debug'
+      logLevel: 'debug',
+      videoPackage: ' guimatheus92/mcp-video-analyzer '
     });
 
     expect(normalizeSettings(config)).toEqual({
@@ -21,7 +22,8 @@ describe('normalizeSettings', () => {
       reasoningEffort: 'low',
       replyTimeoutMs: 45_000,
       speechCooldownMs: 30_000,
-      logLevel: 'debug'
+      logLevel: 'debug',
+      videoPackage: 'guimatheus92/mcp-video-analyzer'
     });
   });
 

@@ -51,6 +51,32 @@ describe('sendReply', () => {
     });
   });
 
+  it('sends the first chunk as a reply to the original message', async () => {
+    const channel = new FakeChannel();
+    await sendReply(channel, 'hello', { sleep, replyToMessageId: '123456789012345678' });
+
+    expect(channel.sent[0]).toEqual({
+      content: 'hello',
+      allowedMentions: ALLOWED_MENTIONS,
+      reply: {
+        messageReference: '123456789012345678',
+        failIfNotExists: false
+      }
+    });
+  });
+
+  it('only adds the reply reference to the first chunk', async () => {
+    const channel = new FakeChannel();
+    await sendReply(channel, 'a'.repeat(2500), {
+      sleep,
+      replyToMessageId: '123456789012345678'
+    });
+
+    expect(channel.sent).toHaveLength(2);
+    expect(channel.sent[0]).toHaveProperty('reply');
+    expect(channel.sent[1]).not.toHaveProperty('reply');
+  });
+
   it('splits a long reply into multiple sends and types before each', async () => {
     const channel = new FakeChannel();
     const text = 'a'.repeat(4500);

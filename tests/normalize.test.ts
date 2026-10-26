@@ -72,6 +72,17 @@ describe('formatDiscordMessage', () => {
     );
   });
 
+  it('exposes video attachment URLs so the model can pass them to a video tool', () => {
+    expect(
+      format({
+        content: '',
+        media: { videos: ['https://cdn.discordapp.com/attachments/1/2/clip.mp4'], files: 1 }
+      })
+    ).toBe(
+      `[Alice|${AUTHOR_ID}|2026-01-02T03:04:05.000Z|${MESSAGE_ID}|-] [影片] https://cdn.discordapp.com/attachments/1/2/clip.mp4 [檔案]`
+    );
+  });
+
   it('uses a media placeholder when text is empty', () => {
     expect(format({ content: '', media: { stickers: 1 } })).toBe(
       `[Alice|${AUTHOR_ID}|2026-01-02T03:04:05.000Z|${MESSAGE_ID}|-] [貼圖]`

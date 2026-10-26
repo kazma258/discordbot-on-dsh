@@ -6,6 +6,8 @@ export interface ReplyTarget {
 export interface MessageMedia {
   readonly stickers?: number;
   readonly images?: number;
+  /** Attachment URLs, so an optional video tool can fetch them. */
+  readonly videos?: readonly string[];
   readonly files?: number;
 }
 
@@ -75,6 +77,9 @@ function formatContent(message: NormalizableMessage): string {
   }
   for (let index = 0; index < countOf(message.media?.images); index += 1) {
     parts.push('[圖片]');
+  }
+  for (const url of message.media?.videos ?? []) {
+    parts.push(`[影片] ${url}`);
   }
   for (let index = 0; index < countOf(message.media?.files); index += 1) {
     parts.push('[檔案]');

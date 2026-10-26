@@ -22,5 +22,11 @@ describe('Discord preset protocol', () => {
     expect(patch).not.toContain('@deepseek-ai/dsh-tool-bash');
     expect(patch).not.toContain('dsh-tool-subagent');
     expect(patch).not.toContain('dsh-tool-workflow');
+    expect(patch).not.toContain('dsh-mcp-client');
+  });
+
+  it('tells the model that video results arrive as [影片分析完成]', () => {
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('[影片分析完成]');
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('不要假裝看過');
   });
 });

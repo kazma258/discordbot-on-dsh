@@ -11,6 +11,7 @@ import type {
   IncomingDiscordMessage,
   MessageHandler,
   ModelSelection,
+  PromptContentPart,
   SessionControllerLike,
   SessionEventLike,
   SessionEventSubscriber
@@ -252,14 +253,15 @@ export class LocalSessionBackend implements MessageHandler {
       sessionId: connection.sessionId
     });
     const reply = this.waitForTurn(message.channelId, connection.sessionId, this.replyTimeoutMs);
-    const content = [
-      { type: 'text' as const, text: formatDshPrompt(
+    const content: PromptContentPart[] = [
+      { type: 'text', text: formatDshPrompt(
         message.text,
         message.replyRequired,
         message.cooldownActive === true,
         message.deliveryNote,
         message.emojiPrompt
-      ) }
+      ) },
+      ...(message.imageParts ?? [])
     ];
     try {
       await this.controller.prompt(
