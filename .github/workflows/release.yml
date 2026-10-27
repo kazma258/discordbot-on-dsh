@@ -1,0 +1,85 @@
+name: release
+
+# Pushing a version tag (v0.6.5, ...) builds the plugin and publishes the tarball.
+# The tagged commit must already contain the bumped package.json version.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the tag matches the plugin version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json (v${version})"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build and pack
+        run: mkdir -p packs && npm pack --pack-destination ./packs
+
+      - name: Verify the built preset is committed
+        run: git diff --exit-code
+
+      - name: Verify the tarball contains the build
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tarball="packs/local-dsh-discord-bot-${version}.tgz"
+          test -f "${tarball}"
+          tar -tzf "${tarball}" > "${RUNNER_TEMP}/tarball-list.txt"
+          grep -q '^package/lib/index\.js$' "${RUNNER_TEMP}/tarball-list.txt"
+
+      - name: Write checksums
+        run: cd packs && sha256sum ./*.tgz > SHA256SUMS
+
+      - name: Keep the tarball as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-bot-tarball
+          path: |
+            packs/*.tgz
+            packs/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" packs/*.tgz packs/SHA256SUMS --clobber
