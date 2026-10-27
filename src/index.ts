@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,8 @@ import type { DiscordPluginConfig, DiscordPluginSettings } from './config.js';
 import { SessionEventBus } from './events.js';
 import { createLogger, isLogLevel, type Logger } from './logger.js';
 import { VideoAnalyzer, resolveVideoPackage } from './video/analyzer.js';
-import { installYtDlp } from './video/ytdlp.js';
+import { writeYtDlpCookies } from './video/cookies.js';
+import { installYtDlp, installYtDlpWrapper } from './video/ytdlp.js';
 import { ContainerToolService, containerImageTag } from './container/service.js';
 import type { SessionControllerLike, SessionEventLike } from './types.js';
 
@@ -212,6 +213,7 @@ async function resolveDiscordToken(ctx: PluginContext, logger: Logger): Promise<
   return process.env.DISCORD_TOKEN?.trim() ?? '';
 }
 
+
 export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   const settings = normalizeSettings(rawConfig);
   const logger = createPluginLogger(ctx, settings.logLevel);
@@ -242,6 +244,11 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
   };
 
   writeStatus('apply', { tokenConfigured: null });
+  try {
+    installYtDlpWrapper(join(baseDir, 'bin'));
+  } catch (error) {
+    logger.warn('yt-dlp subtitle wrapper was not installed', { error });
+  }
 
   const videoPackageSpec = resolveVideoPackage(settings.videoPackage);
   if (settings.videoPackage !== '' && videoPackageSpec === null) {
@@ -340,6 +347,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
               packageSpec: spec,
               cacheDir: join(baseDir, 'video-cache'),
               binDir: join(baseDir, 'bin'),
+              cookiesFile: join(baseDir, 'youtube-cookies.txt'),
               jobsDir: join(baseDir, 'video-jobs'),
               logger,
               ocrLanguage: (process.env.DSH_DISCORD_VIDEO_OCR_LANG ?? 'eng').trim() || 'eng'
@@ -391,6 +399,65 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         }
       }),
     'discord-bot: yt-dlp install route'
+  );
+
+  const cookiesFile = join(baseDir, 'youtube-cookies.txt');
+  ctx.effect(
+    () =>
+      ctx.webServer.register({
+        kind: 'exact',
+        path: '/discord-bot/cookies',
+        handler: async (req, res) => {
+          const send = (status: number, body: unknown): void => {
+            res.statusCode = status;
+            res.setHeader('content-type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify(body));
+          };
+          if (!sameOriginJsonPost(req)) {
+            send(403, { ok: false, error: 'forbidden' });
+            return;
+          }
+          try {
+            let raw = '';
+            for await (const chunk of req) {
+              raw += chunk.toString('utf8');
+              if (raw.length > 300_000) throw new Error('cookies 超過 256KB');
+            }
+            const body: unknown = JSON.parse(raw === '' ? '{}' : raw);
+            const action = isRecord(body) && typeof body.action === 'string' ? body.action : '';
+            if (action === 'status') {
+              let configured = false;
+              try {
+                configured = readFileSync(cookiesFile, 'utf8').trim() !== '';
+              } catch {
+                configured = false;
+              }
+              send(200, { ok: true, configured });
+              return;
+            }
+            if (action === 'clear') {
+              writeYtDlpCookies(cookiesFile, null);
+              send(200, { ok: true, configured: false });
+              return;
+            }
+            if (action !== 'set' || typeof (isRecord(body) ? body.content : undefined) !== 'string') {
+              send(400, { ok: false, error: '不支援的操作' });
+              return;
+            }
+            const content = (body as { content: string }).content;
+            if (content.trim() === '') {
+              send(400, { ok: false, error: 'Cookies 不能為空' });
+              return;
+            }
+            writeYtDlpCookies(cookiesFile, content);
+            logger.info('video cookies stored');
+            send(200, { ok: true, configured: true });
+          } catch (error) {
+            send(500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+      }),
+    'discord-bot: cookies route'
   );
 
   ctx.on('session/event', (session, event) => {
@@ -500,6 +567,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
           packageSpec: videoPackageSpec,
           cacheDir: join(baseDir, 'video-cache'),
           binDir: join(baseDir, 'bin'),
+          cookiesFile: join(baseDir, 'youtube-cookies.txt'),
           jobsDir: join(baseDir, 'video-jobs'),
           maxFrames: envPositiveInt('DSH_DISCORD_VIDEO_MAX_FRAMES', 8, 1, 16),
           timeoutMs: envPositiveInt('DSH_DISCORD_VIDEO_TIMEOUT_MS', 3_900_000, 60_000, 7_200_000),

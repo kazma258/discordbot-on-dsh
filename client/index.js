@@ -261,6 +261,71 @@ window.__ModuleLoader__.load({
         setNoticeState({ kind: kind, text: text });
       }
 
+      var cookieState = React.useState('');
+      var cookie = cookieState[0];
+      var setCookie = cookieState[1];
+      var cookieStatusState = React.useState({ kind: 'loading', text: '檢查中' });
+      var cookieStatus = cookieStatusState[0];
+      var setCookieStatus = cookieStatusState[1];
+
+      function cookieRequest(body) {
+        return fetch('/discord-bot/cookies', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify(body)
+        }).then(function (response) {
+          return response.json().catch(function () { return null; }).then(function (payload) {
+            if (!response.ok || !payload || payload.ok !== true) {
+              throw new Error((payload && payload.error) || ('HTTP ' + response.status));
+            }
+            return payload;
+          });
+        });
+      }
+
+      React.useEffect(function () {
+        var cancelled = false;
+        cookieRequest({ action: 'status' })
+          .then(function (payload) {
+            if (!cancelled) {
+              setCookieStatus({ kind: payload.configured ? 'ok' : 'idle', text: payload.configured ? '已儲存' : '未儲存' });
+            }
+          })
+          .catch(function (error) {
+            if (!cancelled) {
+              setCookieStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
+            }
+          });
+        return function () { cancelled = true; };
+      }, []);
+
+      async function saveCookies() {
+        var value = cookie.trim();
+        if (!value) {
+          setCookieStatus({ kind: 'error', text: 'Cookies 不能為空。' });
+          return;
+        }
+        setCookieStatus({ kind: 'info', text: '儲存中…' });
+        try {
+          await cookieRequest({ action: 'set', content: value });
+          setCookie('');
+          setCookieStatus({ kind: 'ok', text: '已儲存。下一則影片就會用，不用重開。' });
+        } catch (error) {
+          setCookieStatus({ kind: 'error', text: '儲存失敗：' + (error instanceof Error ? error.message : String(error)) });
+        }
+      }
+
+      async function clearCookies() {
+        setCookieStatus({ kind: 'info', text: '清除中…' });
+        try {
+          await cookieRequest({ action: 'clear' });
+          setCookieStatus({ kind: 'idle', text: '未儲存' });
+        } catch (error) {
+          setCookieStatus({ kind: 'error', text: '清除失敗：' + (error instanceof Error ? error.message : String(error)) });
+        }
+      }
+
       var ytDlpState = React.useState({ status: 'idle', text: '' });
       var ytDlp = ytDlpState[0];
       var setYtDlp = ytDlpState[1];
@@ -710,6 +775,38 @@ window.__ModuleLoader__.load({
                 },
                 style: inputStyle
               })
+            )
+          ),
+          h(Field, {
+            label: 'YouTube cookies（選填）',
+            hint: '貼上瀏覽器匯出的 Netscape cookies.txt。只存在這台機器的 youtube-cookies.txt，不會寫進設定檔。用來降低 YouTube 429。'
+          },
+            h('textarea', {
+              value: cookie,
+              rows: 4,
+              placeholder: cookieStatus.kind === 'ok' ? '已儲存；貼上新內容可覆蓋' : '# Netscape HTTP Cookie File',
+              onChange: function (event) {
+                setCookie(event.target.value);
+                setCookieSaved(false);
+              },
+              style: Object.assign({}, inputStyle, { fontFamily: 'ui-monospace, monospace', resize: 'vertical' })
+            })
+          ),
+          h('div', { style: rowStyle },
+            h('button', {
+              type: 'button',
+              disabled: cookieStatus.text === '儲存中…' || cookie.trim() === '',
+              onClick: saveCookies,
+              style: Object.assign({}, cookieStatus.kind === 'ok' ? successButtonStyle : primaryButtonStyle, cookie.trim() === '' ? { opacity: 0.55 } : {})
+            }, cookieStatus.kind === 'ok' && cookie.trim() === '' ? 'Cookies 已儲存 ✓' : '儲存 Cookies'),
+            h('button', {
+              type: 'button',
+              disabled: cookieStatus.kind !== 'ok',
+              onClick: clearCookies,
+              style: secondaryButtonStyle
+            }, '清除 Cookies'),
+            h('span', { style: Object.assign({}, badgeStyle, { color: cookieStatus.kind === 'error' ? '#e5484d' : cookieStatus.kind === 'ok' ? '#2f9e67' : undefined }) },
+              cookieStatus.text
             )
           ),
           h('div', { style: rowStyle },

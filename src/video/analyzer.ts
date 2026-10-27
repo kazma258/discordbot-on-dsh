@@ -64,6 +64,8 @@ export interface VideoAnalyzerOptions {
   readonly cacheDir: string;
   /** Plugin-managed yt-dlp dir, searched before the user's PATH. */
   readonly binDir: string;
+  /** Netscape cookies file passed to yt-dlp as YTDLP_COOKIES. */
+  readonly cookiesFile?: string;
   readonly jobsDir: string;
   readonly logger: Logger;
   readonly maxFrames?: number;
@@ -304,6 +306,8 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
   private readonly packageSpec: string;
   private readonly cacheDir: string;
   private readonly binDir: string;
+  private readonly cookiesFile?: string;
+  private useCookies = false;
   private readonly jobsDir: string;
   private readonly logger: Logger;
   private readonly maxFrames: number;
@@ -317,6 +321,7 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
     this.packageSpec = options.packageSpec;
     this.cacheDir = options.cacheDir;
     this.binDir = options.binDir;
+    this.cookiesFile = options.cookiesFile;
     this.jobsDir = options.jobsDir;
     this.logger = options.logger;
     this.maxFrames = options.maxFrames ?? 8;
@@ -332,8 +337,23 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
       ...process.env,
       // npx's shebang needs `node`; DSH may run without nvm on PATH.
       PATH: `${this.binDir}:${dirname(process.execPath)}:${process.env.PATH ?? ''}`,
-      MCP_CACHE_DIR: this.cacheDir
+      MCP_CACHE_DIR: this.cacheDir,
+      ...(this.useCookies && this.cookiesFile !== undefined
+        ? { YTDLP_COOKIES: this.cookiesFile }
+        : {})
     };
+  }
+
+  private refreshCookies(): void {
+    if (this.cookiesFile === undefined) {
+      this.useCookies = false;
+      return;
+    }
+    try {
+      this.useCookies = readFileSync(this.cookiesFile, 'utf8').trim() !== '';
+    } catch {
+      this.useCookies = false;
+    }
   }
 
   private async runCli(
@@ -390,6 +410,7 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
    * (yt-dlp download -> ffmpeg frames -> OCR) on a short video.
    */
   async check(url: string, signal: AbortSignal): Promise<VideoCheckResult> {
+    this.refreshCookies();
     const steps: VideoCheckStep[] = [];
     const ytdlp = await runProcess('yt-dlp', ['--version'], {
       cwd: process.cwd(),
@@ -462,6 +483,7 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
   }
 
   async analyze(url: string, signal: AbortSignal): Promise<VideoAnalysis> {
+    this.refreshCookies();
     const { work, framesDir } = this.makeWorkDir();
 
     try {

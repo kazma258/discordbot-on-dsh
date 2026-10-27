@@ -6,6 +6,7 @@ export interface VideoJobConfig {
   readonly packageSpec: string;
   readonly cacheDir: string;
   readonly binDir: string;
+  readonly cookiesFile: string;
   /** Scratch directory for analyzer jobs and downloaded frames. */
   readonly jobsDir: string;
   readonly maxFrames: number;

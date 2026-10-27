@@ -207,6 +207,8 @@ YouTube、Bilibili 需要 yt-dlp；直接影片檔不需要。mcp-video-analyzer
 - 分析時這個目錄排在 PATH 最前面；沒按安裝時，使用者自己 PATH 上的 yt-dlp 也可以用。
 - 平台網站常改版，抓不到影片時先按一次更新。
 - Windows 不支援自動安裝。
+- YouTube 429 時，可在設定卡貼上 Netscape 格式的 `cookies.txt`。內容寫進 `~/.dsh/discord-bot/youtube-cookies.txt`（權限 0600），不進 `cordis.patch.yml`，也不進 DSH credentials。儲存後下一則影片即生效。Cookie 等於該 Google 帳號的登入工作階段。
+- 分析器預設只向 yt-dlp 要英文字幕。`bin/yt-dlp` 會先改要 `zh-TW`、`zh-Hans`、`zh-Hant`、日文、韓文，沒有才退回英文。有字幕時用完整字幕，不抽幀。
 
 第一次分析時，`npx` 會下載分析套件，需要網路。
 

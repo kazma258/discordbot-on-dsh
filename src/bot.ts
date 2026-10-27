@@ -123,6 +123,7 @@ export class DiscordBridge {
           packageSpec: video.packageSpec,
           cacheDir: video.cacheDir,
           binDir: video.binDir,
+          cookiesFile: video.cookiesFile,
           jobsDir: video.jobsDir,
           logger,
           maxFrames: video.maxFrames,
