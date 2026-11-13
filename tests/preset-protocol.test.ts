@@ -25,6 +25,16 @@ describe('Discord preset protocol', () => {
     expect(patch).not.toContain('dsh-mcp-client');
   });
 
+  it('mounts the emoji-index row and references its prompt variable', () => {
+    const patch = buildDiscordPresetPatch('persona');
+    expect(patch).toContain('@local/dsh-discord-bot/system-prompt');
+    expect(patch).toContain('{{discord_emoji_index}}');
+  });
+
+  it('tells the model that the emoji catalog arrives in the system prompt', () => {
+    expect(DISCORD_BRIDGE_PROTOCOL).toContain('系統訊息會列出 `[可用應用表情]`');
+  });
+
   it('tells the model that video results arrive as [影片分析完成]', () => {
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('[影片分析完成]');
     expect(DISCORD_BRIDGE_PROTOCOL).toContain('不要假裝看過');

@@ -4,8 +4,7 @@ export function formatDshPrompt(
   normalizedMessage: string,
   replyRequired: boolean,
   cooldownActive = false,
-  deliveryNote?: string,
-  emojiPrompt?: string
+  deliveryNote?: string
 ): string {
   const marker = replyRequired
     ? '[需回覆]'
@@ -13,8 +12,7 @@ export function formatDshPrompt(
       ? '[冷卻]'
       : '[可回覆]';
   const note = deliveryNote === undefined ? '' : `\n${deliveryNote}`;
-  const emojiNote = emojiPrompt ? `\n${emojiPrompt}` : '';
-  return `${marker} ${normalizedMessage}${note}${emojiNote}`;
+  return `${marker} ${normalizedMessage}${note}`;
 }
 
 /**

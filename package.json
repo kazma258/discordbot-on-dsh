@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-discord-bot",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "private": true,
   "type": "module",
   "description": "DSH Host plugin: connect Discord to the local DSH chat session",
@@ -15,6 +15,9 @@
     "./package.json": "./package.json",
     "./container-tools": {
       "default": "./lib/container-tools.js"
+    },
+    "./system-prompt": {
+      "default": "./lib/system-prompt.js"
     }
   },
   "files": [

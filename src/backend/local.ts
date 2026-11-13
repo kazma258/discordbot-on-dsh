@@ -258,8 +258,7 @@ export class LocalSessionBackend implements MessageHandler {
         message.text,
         message.replyRequired,
         message.cooldownActive === true,
-        message.deliveryNote,
-        message.emojiPrompt
+        message.deliveryNote
       ) },
       ...(message.imageParts ?? [])
     ];

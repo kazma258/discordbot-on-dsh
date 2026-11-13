@@ -189,12 +189,30 @@ export class DiscordBridge {
       const fetched = await application.emojis.fetch();
       this.applicationEmojis = buildApplicationEmojiMap(fetched.values(), APPLICATION_EMOJI_NOTES);
       this.applicationEmojiPromptText = applicationEmojiPrompt(this.applicationEmojis);
+      this.writeEmojiIndex(this.applicationEmojiPromptText);
       this.logger.info('loaded application emojis', {
         count: this.applicationEmojis.size,
         described: [...this.applicationEmojis.values()].filter((emoji) => emoji.localNote).length
       });
     } catch (error) {
       this.logger.warn('failed to load application emojis', { error });
+    }
+  }
+
+  /**
+   * Publish the rendered catalog for the preset's prompt-variable row. That row
+   * injects one copy per model request, so the catalog must not ride on user
+   * messages, where it would accumulate in session history.
+   */
+  private writeEmojiIndex(text: string | undefined): void {
+    try {
+      mkdirSync(dirname(this.config.emojiIndexPath), { recursive: true });
+      writeFileSync(this.config.emojiIndexPath, text === undefined ? '' : `${text}\n`, {
+        encoding: 'utf8',
+        mode: 0o600
+      });
+    } catch (error) {
+      this.logger.warn('failed to write emoji index', { error });
     }
   }
 
@@ -468,10 +486,7 @@ export class DiscordBridge {
       text,
       replyRequired: decision.replyRequired,
       cooldownActive: coolingDown,
-      ...(deliveryNote ? { deliveryNote } : {}),
-      ...(this.applicationEmojiPromptText
-        ? { emojiPrompt: this.applicationEmojiPromptText }
-        : {})
+      ...(deliveryNote ? { deliveryNote } : {})
     };
 
     const reply = await this.handler.onMessage(incoming);
@@ -569,9 +584,6 @@ export class DiscordBridge {
       text: prompt,
       replyRequired: true,
       cooldownActive: false,
-      ...(this.applicationEmojiPromptText
-        ? { emojiPrompt: this.applicationEmojiPromptText }
-        : {}),
       ...(imageParts.length > 0 ? { imageParts } : {})
     };
 

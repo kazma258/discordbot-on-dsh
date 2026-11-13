@@ -25,6 +25,8 @@ export interface DiscordPluginConfig {
   readonly speechCooldownMs: number;
   readonly modelSelection?: ModelSelection;
   readonly commandStatusPath?: string;
+  /** Rendered application-emoji catalog for the preset's prompt variable. */
+  readonly emojiIndexPath: string;
   readonly videoJobs?: VideoJobConfig;
 }
 

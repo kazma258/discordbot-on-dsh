@@ -563,6 +563,7 @@ export function apply(ctx: PluginContext, rawConfig: unknown = {}): void {
         speechCooldownMs: settings.speechCooldownMs,
         modelSelection,
         commandStatusPath: join(baseDir, 'commands.json'),
+        emojiIndexPath: join(baseDir, 'emoji-index.txt'),
         ...(videoPackageSpec === null ? {} : { videoJobs: {
           packageSpec: videoPackageSpec,
           cacheDir: join(baseDir, 'video-cache'),
