@@ -516,10 +516,34 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
         ? briefParsed.warnings.filter((value): value is string => typeof value === 'string')
         : [];
       if (briefTranscript.length > 0) {
+        // `brief` 是字幕優先的快速路徑（不下載影片、不抽幀），但分析器的 brief
+        // 等級把 transcript 硬裁在 10 筆（DETAIL_CONFIGS.brief.transcriptMaxEntries）。
+        // 超過 30 秒的影片若有字幕，幾乎不可能只有 10 句，剛好停在 10 就是尾巴
+        // 被切了。只有這種情況才補跑一次 standard + 1 幀取完整字幕；短片與無
+        // 字幕影片仍然走原本的快速路徑。
+        let transcript = briefTranscript;
+        if (briefTranscript.length >= 10 && (durationSec ?? 0) > 30) {
+          const full = await this.runCli(url, 'standard', framesDir, this.timeoutMs, signal, 1);
+          if (full.code === 0 && !full.timedOut) {
+            const fullTranscript = rows(parseAnalysis(full.stdout).transcript);
+            if (fullTranscript.length > briefTranscript.length) {
+              transcript = fullTranscript;
+              this.logger.info('video transcript completed past the brief cap', {
+                brief: briefTranscript.length,
+                full: fullTranscript.length
+              });
+            }
+          } else {
+            this.logger.warn('video transcript expansion failed; keeping brief transcript', {
+              code: full.code,
+              timedOut: full.timedOut
+            });
+          }
+        }
         const evidenceText = buildEvidence(
           title,
           duration,
-          briefTranscript,
+          transcript,
           [],
           briefWarnings,
           this.maxEvidenceChars
@@ -527,7 +551,7 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
         this.logger.info('video analysis ready from subtitles', {
           title: title ?? null,
           duration: duration ?? null,
-          transcript: briefTranscript.length,
+          transcript: transcript.length,
           frames: 0
         });
         return {
@@ -537,7 +561,7 @@ export class VideoAnalyzer implements VideoAnalyzerLike {
           ...(title === undefined ? {} : { title }),
           ...(duration === undefined ? {} : { duration }),
           ...(durationSec === undefined ? {} : { durationSec }),
-          transcript: briefTranscript,
+          transcript,
           ocr: [],
           frames: [],
           warnings: briefWarnings,
