@@ -13,6 +13,7 @@ window.__ModuleLoader__.load({
       return state[0];
     };
     var TOKEN_REF = 'DISCORD_TOKEN';
+    var QUESTION_ICON = 'data:image/png;base64,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';
 
     var EMPTY = {
       preset: 'discord-whale',
@@ -127,6 +128,31 @@ window.__ModuleLoader__.load({
       fontSize: '12px',
       lineHeight: 1.5
     };
+    var hintIconStyle = {
+      display: 'inline-block',
+      width: '14px',
+      height: '14px',
+      borderRadius: '50%',
+      cursor: 'help',
+      verticalAlign: 'middle'
+    };
+    var hintBubbleStyle = {
+      position: 'absolute',
+      top: '18px',
+      left: '-4px',
+      zIndex: 60,
+      width: '260px',
+      padding: '8px 10px',
+      border: '1px solid var(--dsw-alias-border-l2)',
+      borderRadius: '8px',
+      background: 'var(--dsw-alias-bg-layer-1, #1c1c1c)',
+      color: 'var(--dsw-alias-label-secondary)',
+      fontSize: '11.5px',
+      lineHeight: 1.55,
+      boxShadow: '0 8px 20px rgba(0, 0, 0, 0.25)',
+      whiteSpace: 'normal'
+    };
+    var fieldLabelStyle = { display: 'inline-flex', alignItems: 'center', gap: '2px' };
     var badgeStyle = {
       padding: '2px 7px',
       borderRadius: '99px',
@@ -160,13 +186,49 @@ window.__ModuleLoader__.load({
       };
     }
 
+    function Hint(props) {
+      var state = React.useState(false);
+      var open = state[0];
+      var setOpen = state[1];
+      return h(
+        'span',
+        {
+          style: { position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: '5px' },
+          onMouseEnter: function () { setOpen(true); },
+          onMouseLeave: function () { setOpen(false); }
+        },
+        h('span', {
+          tabIndex: 0,
+          role: 'img',
+          'aria-label': props.text,
+          onFocus: function () { setOpen(true); },
+          onBlur: function () { setOpen(false); },
+          style: hintIconStyle
+        },
+          h('img', {
+            src: QUESTION_ICON,
+            alt: '',
+            'aria-hidden': 'true',
+            draggable: false,
+            style: { width: '14px', height: '14px', borderRadius: '50%', display: 'block' }
+          })
+        ),
+        open ? h('span', { role: 'tooltip', style: hintBubbleStyle }, props.text) : null
+      );
+    }
+
     function Field(props) {
       return h(
         'label',
         { style: fieldStyle },
-        h('span', null, props.label),
+        h(
+          'span',
+          { style: fieldLabelStyle },
+          props.label,
+          props.hint ? h(Hint, { text: props.hint }) : null
+        ),
         props.children,
-        props.hint ? h('span', { style: hintStyle }, props.hint) : null
+        props.note ? h('span', { style: hintStyle }, props.note) : null
       );
     }
 
@@ -575,7 +637,7 @@ window.__ModuleLoader__.load({
         h('div', null,
           h('h2', { style: titleStyle }, 'Discord Bot'),
           h('p', { style: introStyle },
-            '連線 Discord 到這台 DSH 的 local session。Token 存在 DSH credentials，其餘設定存在 profile。'
+            '把 Discord 頻道接到本地 DSH session。'
           )
         ),
         h(Notice, {
@@ -621,25 +683,26 @@ window.__ModuleLoader__.load({
             )
           ),
           h('p', { style: hintStyle },
-            'Token 由 DSH credentials 管理，不會寫入 cordis.patch.yml。儲存後需重啟 DSH 才會重新連線。'
-          ),
-          h('p', { style: hintStyle },
-            '讀取預設關閉。具管理員權限的使用者在頻道輸入 /deeplook 開啟；/deeplook mode:off 關閉。Discord 身份組權限決定 bot 能看到哪些頻道。'
+            '儲存後需重啟 DSH 才會重新連線。',
+            h(Hint, {
+              text: 'Token 由 DSH credentials 管理，不寫入 cordis.patch.yml。讀取預設關閉：具管理員權限的使用者在頻道輸入 /deeplook 開啟，/deeplook mode:off 關閉。bot 只能看到其身分組有權限的頻道。'
+            })
           )
         ),
         h('section', { style: cardStyle },
           h('h3', { style: sectionTitleStyle }, '模型'),
           h('p', { style: hintStyle },
-            '留空則使用 DSH 的預設模型。設定會在每次回覆前套用到該頻道 session。'
+            '留空使用 DSH 預設模型。',
+            h(Hint, { text: '設定的 provider / model / reasoning effort 會在每次回覆前套用到該頻道的 session。' })
           ),
           h('div', { style: gridStyle },
             h(Field, {
               label: 'Provider',
               hint: catalog.status === 'ready'
-                ? '從 DSH model catalog 讀取'
+                ? '選項來自 DSH model catalog。'
                 : catalog.status === 'loading'
-                  ? '讀取模型目錄中…'
-                  : '讀取失敗，使用手動輸入'
+                  ? '正在讀取模型目錄…'
+                  : '模型目錄讀取失敗，改為手動輸入。'
             },
               catalog.status === 'ready'
                 ? h('select', {
@@ -669,8 +732,8 @@ window.__ModuleLoader__.load({
             h(Field, {
               label: 'Model',
               hint: draft.provider === ''
-                ? '先選 provider；留空用 DSH 預設'
-                : '從該 provider 的 catalog 讀取'
+                ? '先選 provider；留空使用 DSH 預設。'
+                : '選項來自該 provider 的 catalog；留空使用 provider 預設。'
             },
               catalog.status === 'ready' && draft.provider !== ''
                 ? h('select', {
@@ -699,7 +762,7 @@ window.__ModuleLoader__.load({
             ),
             h(Field, {
               label: 'Reasoning Effort',
-              hint: catalogEfforts.length > 0 ? '由目前 model 的 catalog 提供' : '此 model 沒有 effort metadata；使用通用選項'
+              hint: '依目前 model 的 catalog 提供；沒有 effort metadata 時使用通用選項。'
             },
               h('select', {
                 value: draft.reasoningEffort,
@@ -717,43 +780,43 @@ window.__ModuleLoader__.load({
             )
           ),
           h('div', { style: rowStyle },
-            h('p', { style: hintStyle },
-              catalog.status === 'loading'
-                ? '正在讀取 DSH 模型目錄…'
-                : catalog.status === 'error'
-                  ? '模型目錄讀取失敗：' + (catalog.message || 'unknown') + '；目前使用手動輸入。'
-                  : '模型目錄：' + providerGroups.length + ' providers' +
-                    (catalog.failures.length > 0 ? '，' + catalog.failures.length + ' 個 provider 讀取失敗' : '') +
-                    (catalog.default
-                      ? '；系統預設：' + [catalog.default.provider, catalog.default.model, catalog.default.reasoningEffort].filter(Boolean).join(' / ')
-                      : '')
-            ),
+            catalog.status === 'loading'
+              ? h('p', { style: hintStyle }, '正在讀取模型目錄…')
+              : catalog.status === 'error'
+                ? h('p', { style: hintStyle },
+                    '讀取失敗：' + (catalog.message || 'unknown') + '（改用手動輸入）')
+                : h('p', { style: hintStyle },
+                    '模型目錄已載入',
+                    h(Hint, {
+                      text: 'providers：' + providerGroups.length +
+                        (catalog.failures.length > 0
+                          ? '；讀取失敗：' + catalog.failures.length + ' 個'
+                          : '') +
+                        (catalog.default
+                          ? '；系統預設：' + [catalog.default.provider, catalog.default.model, catalog.default.reasoningEffort].filter(Boolean).join(' / ')
+                          : '')
+                    })
+                  ),
             h('button', {
               type: 'button',
               disabled: catalog.status === 'loading',
               onClick: loadCatalog,
               style: secondaryButtonStyle
-            }, '重新讀取模型')
-          ),
-          h(Field, { label: 'Agent Preset' },
-            h('input', {
-              value: draft.preset,
-              placeholder: 'discord-whale',
-              onChange: function (event) { setField('preset', event.target.value); },
-              style: inputStyle
-            })
+            }, catalog.status === 'loading' ? '讀取中…' : '重新讀取模型')
           )
         ),
         h('section', { style: cardStyle },
           h('h3', { style: sectionTitleStyle }, '影片分析'),
           h('p', { style: hintStyle },
-            '留空 = 關閉。填入後，頻道裡的影片連結或上傳影片會在背景分析，完成後以「回應訊息」回覆原訊息，不會卡住一般對話。' +
-            '套件以 npx 執行、不修改原始碼。沒有 yt-dlp 時，按「安裝／更新 yt-dlp」下載官方執行檔。'
+            '留空 = 關閉。',
+            h(Hint, {
+              text: '填入後，頻道裡的影片連結或上傳影片會在背景分析，完成後以「回應訊息」回覆原訊息，不會卡住一般對話。套件以 npx 執行、不修改原始碼；YouTube / Bilibili 需要 yt-dlp，按下方按鈕安裝。'
+            })
           ),
           h('div', { style: gridStyle },
             h(Field, {
               label: '影片分析 MCP 套件',
-              hint: 'npm 套件名稱或 skills id，例如 guimatheus92/mcp-video-analyzer 或 mcp-video-analyzer@0.11.0'
+              hint: 'npm 套件名稱或 skills id，例如 guimatheus92/mcp-video-analyzer 或 mcp-video-analyzer@0.11.0。'
             },
               h('input', {
                 value: draft.videoPackage,
@@ -765,7 +828,7 @@ window.__ModuleLoader__.load({
                 style: inputStyle
               })
             ),
-            h(Field, { label: '驗證用影片網址（選填）', hint: '留空使用 19 秒的公開 YouTube 影片' },
+            h(Field, { label: '驗證用影片網址（選填）', hint: '留空使用 19 秒的公開 YouTube 影片。' },
               h('input', {
                 value: videoCheck.url,
                 placeholder: 'https://www.youtube.com/watch?v=…',
@@ -779,7 +842,7 @@ window.__ModuleLoader__.load({
           ),
           h(Field, {
             label: 'YouTube cookies（選填）',
-            hint: '貼上瀏覽器匯出的 Netscape cookies.txt。只存在這台機器的 youtube-cookies.txt，不會寫進設定檔。用來降低 YouTube 429。'
+            hint: 'Netscape 格式 cookies.txt，只存在本機 youtube-cookies.txt、不寫入設定檔；用來降低 YouTube 429。'
           },
             h('textarea', {
               value: cookie,
@@ -840,7 +903,10 @@ window.__ModuleLoader__.load({
         h('section', { style: cardStyle },
           h('h3', { style: sectionTitleStyle }, '進階'),
           h('div', { style: gridStyle },
-            h(Field, { label: 'Reply Timeout (ms)' },
+            h(Field, {
+              label: 'Reply Timeout (ms)',
+              hint: '等待一輪回覆完成的毫秒數（5000–600000）。預設 120000。'
+            },
               h('input', {
                 type: 'number',
                 min: 5000,
@@ -850,7 +916,10 @@ window.__ModuleLoader__.load({
                 style: inputStyle
               })
             ),
-            h(Field, { label: 'Speech Cooldown (ms)' },
+            h(Field, {
+              label: 'Speech Cooldown (ms)',
+              note: '0 = 關閉；只抑制非 @／非回覆的發言。'
+            },
               h('input', {
                 type: 'number',
                 min: 0,
@@ -859,10 +928,12 @@ window.__ModuleLoader__.load({
                 value: draft.speechCooldownMs,
                 onChange: function (event) { setField('speechCooldownMs', event.target.value); },
                 style: inputStyle
-              }),
-              h('span', { style: hintStyle }, '0 = 關閉；預設 30000。只抑制非 @／非回覆的可選發言。')
+              })
             ),
-            h(Field, { label: 'Log Level' },
+            h(Field, {
+              label: 'Log Level',
+              hint: 'Host plugin 的 log level；debug 會記錄較多細節，適合排查問題。'
+            },
               h('select', {
                 value: draft.logLevel,
                 onChange: function (event) { setField('logLevel', event.target.value); },
@@ -873,6 +944,17 @@ window.__ModuleLoader__.load({
                 h('option', { value: 'warn' }, 'warn'),
                 h('option', { value: 'error' }, 'error')
               )
+            ),
+            h(Field, {
+              label: 'Agent Preset',
+              hint: '每個頻道 session 使用的 DSH agent preset；預設 discord-whale。'
+            },
+              h('input', {
+                value: draft.preset,
+                placeholder: 'discord-whale',
+                onChange: function (event) { setField('preset', event.target.value); },
+                style: inputStyle
+              })
             )
           )
         ),
@@ -883,13 +965,11 @@ window.__ModuleLoader__.load({
             onClick: saveSettings,
             style: saved ? successButtonStyle : primaryButtonStyle
           }, saved ? '已儲存 ✓' : busy ? '儲存中…' : '儲存設定'),
-          h('span', { style: statusStyle },
-            snapshot.writable === false
-              ? 'profile 唯讀'
-              : snapshot.revision === undefined
-                ? '等待 DSH settings 同步'
-                : 'settings revision ' + snapshot.revision
-          )
+          snapshot.writable === false
+            ? h('span', { style: statusStyle }, 'profile 唯讀')
+            : saved
+              ? h('span', { style: statusStyle }, '已寫入 profile')
+              : null
         )
       );
     }
